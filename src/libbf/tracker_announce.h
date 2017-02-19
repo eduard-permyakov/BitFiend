@@ -65,6 +65,6 @@ typedef struct peer{
     struct sockaddr_in ip;
 }peer_t;
 
-int tracker_announce(const char *url, tracker_announce_request_t *request);
+int tracker_announce(const char *urlstr, tracker_announce_request_t *request);
 
 #endif
