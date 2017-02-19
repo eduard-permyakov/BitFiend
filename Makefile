@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-std=c99
+CFLAGS=-std=gnu99
 BIN=./bin/bitfiend
 
 LIBBF_SRCS=$(wildcard ./src/libbf/*.c)
