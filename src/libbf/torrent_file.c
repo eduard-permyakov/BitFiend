@@ -1,6 +1,7 @@
 #include "torrent_file.h"
 #include "sha1.h"
 #include "tracker_announce.h" //temp
+#include "peer_id.h" //temp
 
 #include <stdlib.h>
 #include <stdio.h> //temp
