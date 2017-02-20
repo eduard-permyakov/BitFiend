@@ -82,9 +82,28 @@ bencode_obj_t *torrent_file_parse(const char *path)
     return ret;
 }
 
+void tracker_callback(const byte_str_t *resp)
+{
+    printf("Tracker response received!\n");
+    
+    bencode_obj_t *obj;
+    const char *endptr;
+    obj = bencode_parse_object(resp->str, &endptr);
+    assert(obj);
+
+    const char *key;
+    const unsigned char *val;
+    extern void print_obj(bencode_obj_t *obj);
+
+    FOREACH_KEY_AND_VAL(key, val, obj->data.dictionary) {
+        printf("        Key: %s\n        ", key);
+        print_obj((bencode_obj_t*)val);
+    }
+}
+
 int main(void)
 {
-    bencode_obj_t *out = torrent_file_parse("/home/eduard/Downloads/ubuntu-16.10-desktop-amd64.iso.torrent");
+    bencode_obj_t *out = torrent_file_parse("/home/eduard/Downloads/ubuntu.torrent");
     if(out)
         printf("Torrent file successfully parsed!\n");
 
@@ -130,6 +149,7 @@ int main(void)
         }
     }
 
+    printf("here\n");
     char *url;
     FOREACH_KEY_AND_VAL(key, val, ((bencode_obj_t*)out)->data.dictionary) {
         if(!strcmp(key, "announce")) {
@@ -137,5 +157,6 @@ int main(void)
         }
     }
 
-    tracker_announce(url, req);
+    tracker_announce(url, req, tracker_callback);
+    free(req);
 }

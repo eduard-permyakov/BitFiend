@@ -13,6 +13,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 
+
 static bool is_valid_url_char(const unsigned char c)
 {
     return isdigit(c) || isalpha(c) || (c == '.') || (c == '-') || (c == '_') || (c == '~');
@@ -99,7 +100,7 @@ static char *build_http_request(const char *urlstr, tracker_announce_request_t *
     assert(written < sizeof(buff));
     buff[written] = '\0';
 
-    char *ret = malloc(written);
+    char *ret = malloc(written + 1);
     if(ret){
         strcpy(ret, buff);
     }
@@ -124,7 +125,6 @@ static int tracker_connect(url_t *url)
         goto fail_getaddrinfo;
 
     for(; tracker; tracker = tracker->ai_next) {
-        printf("inloop\n");
         if((sockfd = socket(tracker->ai_family, tracker->ai_socktype, tracker->ai_protocol)) < 0) {
             continue;
         }
@@ -140,12 +140,49 @@ static int tracker_connect(url_t *url)
     if(!tracker)
         goto fail_connect;
 
+    free(tracker);
     return sockfd;
 
 fail_connect:
     free(tracker);
 fail_getaddrinfo:
     return -1;
+}
+
+static byte_str_t *content_from_tracker_resp(char *buff, size_t len)
+{
+    char *line,*saveptr;
+    char *token, *saveptrtok;
+    unsigned cont_len;
+
+    line = strtok_r(buff, "\n", &saveptr);
+    if(strncmp(line, "HTTP/1.0 200 OK", strlen("HTTP/1.0 200 OK")))
+        goto fail_parse;
+
+    line = strtok_r(NULL, "\n", &saveptr);
+    if(strncmp(line, "Content-Length:", strlen("Content-Length:")))
+        goto fail_parse;
+    token = strtok_r(line, ":", &saveptrtok);
+    token = strtok_r(NULL, ":", &saveptrtok);
+    cont_len = strtoul(token, NULL, 0);
+
+    line = strtok_r(NULL, "\n", &saveptr);
+    if(strncmp(line, "Content-Type: text/plain", strlen("Content-Type: text/plain")))
+        goto fail_parse;
+
+    line = strtok_r(NULL, "\n", &saveptr);
+    if(strncmp(line, "Pragma", strlen("Pragma")))
+        goto fail_parse;
+
+    line = strtok_r(NULL, "\n", &saveptr);
+    if(strlen(line) != 1)
+        goto fail_parse;
+
+    byte_str_t *ret = byte_str_new(cont_len, line + strlen(line) + 1);
+    return ret;
+
+fail_parse:
+    return NULL; 
 }
 
 static int tracker_sendall(int sockfd, const char *buff, size_t len)
@@ -162,7 +199,7 @@ static int tracker_sendall(int sockfd, const char *buff, size_t len)
     return 0;
 }
 
-static int tracker_recvall(int sockfd, const char **outbuff, size_t *outlen)
+static int tracker_recv_resp(int sockfd, byte_str_t **outcont)
 {
     char buff[2048];
     size_t tot_recv = 0;
@@ -173,29 +210,26 @@ static int tracker_recvall(int sockfd, const char **outbuff, size_t *outlen)
         if(nb < 0)
             return -1;
 
-        printf("Received %zd bytes:\n%.*s\n", nb, (int)nb, buff);
-        
         tot_recv += nb;
     }while(nb > 0);
 
     char *ret = malloc(tot_recv);
     memcpy(ret, buff, tot_recv);
-    *outbuff = ret;
-    *outlen = tot_recv;
+    *outcont = content_from_tracker_resp(buff, tot_recv);
     
     return 0;
 }
 
-int tracker_announce(const char *urlstr, tracker_announce_request_t *request)
+int tracker_announce(const char *urlstr, tracker_announce_request_t *request, tracker_callback_t tc)
 {
-    char *request_str = build_http_request(urlstr, request);
     int sockfd;
-    const char *resp;
-    size_t resp_len;
+    byte_str_t *resp;
 
     url_t *url = url_from_str(urlstr);
     if(!url)
         goto fail_parse_url;
+
+    char *request_str = build_http_request(urlstr, request);
 
     printf("HTTP REQUEST:%s\n", request_str);
 
@@ -205,11 +239,13 @@ int tracker_announce(const char *urlstr, tracker_announce_request_t *request)
     if(tracker_sendall(sockfd, request_str, strlen(request_str)) < 0)
         goto fail_send;
 
-    if(tracker_recvall(sockfd, &resp, &resp_len) < 0)
+    if(tracker_recv_resp(sockfd, &resp) < 0)
         goto fail_recv;
 
     url_free(url);
     free(request_str);
+
+    tc(resp);
     return 0;
 
 fail_recv:

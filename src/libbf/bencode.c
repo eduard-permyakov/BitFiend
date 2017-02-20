@@ -189,7 +189,7 @@ void print_obj(bencode_obj_t *obj)
             break;
         }
         case BENCODE_TYPE_STRING:
-            printf("String: %s\n", BYTE_STR_AS_NULL_TERM_ASCII(obj->data.string));
+            printf("String: %p\n", obj->data.string);
             break;
     }
 }

@@ -2,6 +2,7 @@
 #define TRACKER_ANNOUNCE_H
 
 #include "list.h"
+#include "byte_str.h"
 #include <stddef.h>
 #include <netinet/ip.h>
 
@@ -65,6 +66,8 @@ typedef struct peer{
     struct sockaddr_in ip;
 }peer_t;
 
-int tracker_announce(const char *urlstr, tracker_announce_request_t *request);
+typedef void (*tracker_callback_t)(const byte_str_t *resp);
+
+int tracker_announce(const char *urlstr, tracker_announce_request_t *request, tracker_callback_t tc);
 
 #endif
