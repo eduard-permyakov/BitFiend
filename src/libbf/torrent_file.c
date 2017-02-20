@@ -89,6 +89,7 @@ fail_open:
     return NULL;
 }
 
+#if 0
 void tracker_callback(byte_str_t *resp)
 {
     printf("Tracker response received!\n");
@@ -170,3 +171,4 @@ int main(void)
     bencode_free_obj_and_data_recursive(out);
     free(req);
 }
+#endif

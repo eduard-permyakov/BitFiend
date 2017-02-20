@@ -109,7 +109,7 @@ static char *build_http_request(const char *urlstr, tracker_announce_request_t *
 
 static int tracker_connect(url_t *url)
 {
-    struct addrinfo hints, *tracker;
+    struct addrinfo hints, *tracker, *head;;
     int sockfd;
 
     memset(&hints, 0, sizeof(struct addrinfo));
@@ -121,11 +121,12 @@ static int tracker_connect(url_t *url)
     port[sizeof(port)-1] = '\0';
 
     int rv;
-    if(rv = getaddrinfo(url->hostname, port, &hints, &tracker))
+    if(rv = getaddrinfo(url->hostname, port, &hints, &head))
         goto fail_getaddrinfo;
 
-    for(; tracker; tracker = tracker->ai_next) {
-        if((sockfd = socket(tracker->ai_family, tracker->ai_socktype, tracker->ai_protocol)) < 0) {
+    for(tracker = head; tracker; tracker = tracker->ai_next) {
+        if((sockfd = socket(tracker->ai_family, tracker->ai_socktype, 
+            tracker->ai_protocol)) < 0) {
             continue;
         }
 
@@ -140,11 +141,11 @@ static int tracker_connect(url_t *url)
     if(!tracker)
         goto fail_connect;
 
-    free(tracker);
+    free(head);
     return sockfd;
 
 fail_connect:
-    free(tracker);
+    free(head);
 fail_getaddrinfo:
     return -1;
 }
