@@ -213,8 +213,6 @@ static int tracker_recv_resp(int sockfd, byte_str_t **outcont)
         tot_recv += nb;
     }while(nb > 0);
 
-    char *ret = malloc(tot_recv);
-    memcpy(ret, buff, tot_recv);
     *outcont = content_from_tracker_resp(buff, tot_recv);
     
     return 0;
@@ -252,7 +250,7 @@ fail_recv:
 fail_send:
     close(sockfd);
 fail_connect:
-    free(url);
+    url_free(url);
 fail_parse_url:
     free(request_str);
     return -1;

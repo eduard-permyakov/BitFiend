@@ -28,7 +28,38 @@ static void *bencode_obj_free(bencode_obj_t *obj)
 
 void bencode_free_obj_and_data_recursive(bencode_obj_t *obj)
 {
-    //TODO
+    switch(obj->type) {
+        case BENCODE_TYPE_STRING:
+            byte_str_free(obj->data.string);
+            free(obj);
+            break;
+        case BENCODE_TYPE_INT:
+            free(obj);
+            break;
+        case BENCODE_TYPE_LIST: {
+            const unsigned char *entry;
+
+            FOREACH_ENTRY(entry, obj->data.list) {
+                bencode_free_obj_and_data_recursive(*((bencode_obj_t**)entry));
+            }
+    
+            list_free(obj->data.list);
+            free(obj);
+            break;
+        }
+        case BENCODE_TYPE_DICT: {
+            const char *key;
+            const unsigned char *val;
+
+            FOREACH_KEY_AND_VAL(key, val, obj->data.dictionary) {
+                bencode_free_obj_and_data_recursive(*((bencode_obj_t**)val));
+            }
+
+            dict_free(obj->data.dictionary);
+            free(obj);
+            break;
+        }
+    }
 }
 
 bencode_obj_t *bencode_parse_object(const char *benc, const char **endptr)
@@ -111,10 +142,10 @@ static bencode_obj_t *bencode_parse_dict(const char *benc, const char **endptr)
         assert(value);
         assert(*endptr > benc);
         
-        dict_add(ret->data.dictionary, BYTE_STR_AS_NULL_TERM_ASCII(key->data.string), (unsigned char*)value, sizeof(*value));
+        dict_add(ret->data.dictionary, (char*)key->data.string->str, 
+            (unsigned char*)&value, sizeof(value));
 
-        bencode_obj_free(key);
-        bencode_obj_free(value);
+        bencode_free_obj_and_data_recursive(key);
     }
 
     assert(**endptr == 'e');
@@ -148,9 +179,7 @@ static bencode_obj_t *bencode_parse_list(const char *benc, const char **endptr)
         bencode_obj_t *elem= bencode_parse_object(benc, endptr);
         assert(elem);
 
-        list_add(ret->data.list, (unsigned char*)elem, sizeof(*elem));
-    
-        bencode_obj_free(elem);
+        list_add(ret->data.list, (unsigned char*)&elem, sizeof(elem));
     }
 
     assert(**endptr == 'e');
@@ -175,7 +204,7 @@ void print_obj(bencode_obj_t *obj)
             printf("Dict: \n");
             FOREACH_KEY_AND_VAL(key, val, obj->data.dictionary) {
                 printf("Key: %s\n", key);
-                print_obj((bencode_obj_t*)val);
+                print_obj(*((bencode_obj_t**)val));
             }
             break;
         }
@@ -184,7 +213,7 @@ void print_obj(bencode_obj_t *obj)
             printf("List: \n");
             FOREACH_ENTRY(entry, obj->data.list) {
                 printf("            ");
-                print_obj((bencode_obj_t*)entry);
+                print_obj(*((bencode_obj_t**)entry));
             }
             break;
         }

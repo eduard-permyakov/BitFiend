@@ -66,7 +66,7 @@ typedef struct peer{
     struct sockaddr_in ip;
 }peer_t;
 
-typedef void (*tracker_callback_t)(const byte_str_t *resp);
+typedef void (*tracker_callback_t)(byte_str_t *resp);
 
 int tracker_announce(const char *urlstr, tracker_announce_request_t *request, tracker_callback_t tc);
 

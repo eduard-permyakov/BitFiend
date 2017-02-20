@@ -61,7 +61,7 @@ void list_free(list_t *list)
     node_t *curr = list->head;
     while(curr) {
         node_t *tmp = curr->next;
-        free(curr);
+        node_free(curr);
         curr = tmp;
     }
 

@@ -9,7 +9,8 @@
     for(dict_entry_t *_entry = _dict_ptr->bins[_bin]; _entry; _entry = _entry->next)
 
 #define FOREACH_ENTRY_AND_PREV_IN_BIN(_entry, _prev, _dict_ptr, _bin) \
-    for(dict_entry_t *_entry = _dict_ptr->bins[_bin], *_prev = NULL; _entry; _prev = _entry, _entry = _entry->next)
+    for(dict_entry_t *_entry = _dict_ptr->bins[_bin], *_prev = NULL; _entry; \
+    _prev = _entry, _entry = _entry->next)
 
 #define SET_TO_LAST_ENTRY(entry_ptr, dict_ptr, bin) \
     do { \
@@ -51,7 +52,7 @@ static dict_entry_t *dict_entry_init(const char *key, void *value, size_t size)
             free(ret);
             return NULL;
         }
-        strncpy(ret->key, key, strlen(key) + 1);
+        memcpy(ret->key, key, strlen(key) + 1);
         ret->size = size;
         ret->next = NULL;
         memcpy(ret->value, value, size);
@@ -103,10 +104,13 @@ void dict_free(dict_t *dict)
 {
     for(unsigned i = 0; i < dict->size; i++){
         FOREACH_ENTRY_AND_PREV_IN_BIN(entry, prev, dict, i) {
-            if(prev)
+            if(prev){
                 dict_entry_free(prev);
-            if(!entry->next)
+            }
+            if(!entry->next){
                 dict_entry_free(entry);
+                break;
+            }
         }
     }
     free(dict->bins);
@@ -167,12 +171,10 @@ void dict_rehash(dict_t *dict, size_t newsize)
     newbins = calloc(newsize, sizeof(dict_entry_t*));
 
     for(unsigned i = 0; i < dict->size; i++) {
-        printf("bin: %d\n", i);
         FOREACH_ENTRY_AND_PREV_IN_BIN(entry, prev, dict, i) {
             if(prev)
                 prev->next = NULL; /*This node at the end of a new bin*/
             
-            printf("entry: %p, entry->next: %p\n", entry, entry->next);
             unsigned hash = hashf(newsize, entry->key);
             if(!newbins[hash]){
                 newbins[hash] = entry;
