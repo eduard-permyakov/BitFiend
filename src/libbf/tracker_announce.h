@@ -25,7 +25,8 @@ enum {
 enum {
     RESPONSE_HAS_FAILURE_REASON     = (1 << 0),
     RESPONSE_HAS_WARNING_MESSAGE    = (1 << 1),
-    RESPONSE_HAS_MIN_INTERVAL       = (1 << 2)
+    RESPONSE_HAS_MIN_INTERVAL       = (1 << 2),
+    RESPONSE_HAS_TRACKER_ID         = (1 << 3)
 };
 
 #define SET_HAS(_ptr, _has) ((_ptr)->has |= (_has))
@@ -66,8 +67,8 @@ typedef struct peer{
     struct sockaddr_in ip;
 }peer_t;
 
-typedef void (*tracker_callback_t)(byte_str_t *resp);
-
-int tracker_announce(const char *urlstr, tracker_announce_request_t *request, tracker_callback_t tc);
+tracker_announce_resp_t *tracker_announce(const char *urlstr, tracker_announce_request_t *request);
+void tracker_announce_request_free(tracker_announce_request_t *req);
+void tracker_announce_resp_free(tracker_announce_resp_t *resp);
 
 #endif

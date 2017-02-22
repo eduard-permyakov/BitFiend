@@ -1,7 +1,7 @@
-#ifndef TORRENT_H
-#define TORRENT_H
+#ifndef BITFIEND_H 
+#define BITFIEND_H
 
-typedef struct torrent torrent_t;
+#include "torrent.h"
 
 enum{
     BITFIEND_FAILURE = -1,

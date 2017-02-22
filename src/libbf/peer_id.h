@@ -1,8 +1,8 @@
 #ifndef PEER_ID_H
 #define PEER_ID_H
 
-#include "byte_str.h"
+extern char g_local_peer_id[20];
 
-byte_str_t *peer_id_get_new(void);
+void peer_id_create(char outbuff[20]);
 
 #endif

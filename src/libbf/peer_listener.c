@@ -110,9 +110,7 @@ static void *peer_listen(void *arg)
     pthread_exit(NULL);
 
 fail_listen:
-    printf("fail listen\n");
 fail_bind:
-    printf("fail bind\n");
     pthread_exit(NULL);
 }
 

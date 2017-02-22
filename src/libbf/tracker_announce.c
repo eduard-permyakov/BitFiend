@@ -1,5 +1,6 @@
 #include "tracker_announce.h"
 #include "url.h"
+#include "bencode.h"
 
 #include <stdio.h>
 #include <stdbool.h>
@@ -219,10 +220,116 @@ static int tracker_recv_resp(int sockfd, byte_str_t **outcont)
     return 0;
 }
 
-int tracker_announce(const char *urlstr, tracker_announce_request_t *request, tracker_callback_t tc)
+static list_t *parse_peerlist(byte_str_t *raw)
+{
+    list_t *peers = list_init();
+    if(!peers)
+        goto fail_alloc;
+
+    assert(raw->size % 6 == 0);
+    for(int i = 0; i < raw->size; i+= 6) {
+
+        uint32_t ip;
+        memcpy(&ip, raw->str + i, sizeof(uint32_t));
+
+        uint16_t port;
+        memcpy(&port, raw->str + i + sizeof(uint32_t), sizeof(uint16_t));
+
+        peer_t *peer = malloc(sizeof(peer_t));
+        peer->ip.sin_family = AF_INET;
+        peer->ip.sin_addr.s_addr = ip;
+        peer->ip.sin_port = port;
+        memset(peer->ip.sin_zero, 0, sizeof(peer->ip.sin_zero));
+
+        memset(peer->peer_id, 0, sizeof(peer->peer_id));
+
+        list_add(peers, (unsigned char*)&peer, sizeof(peer));
+    }
+
+    return peers;
+
+fail_alloc:
+    return NULL;
+}
+
+static tracker_announce_resp_t *parse_tracker_response(const byte_str_t *raw)
+{
+    const char *endptr;
+    bencode_obj_t *obj = bencode_parse_object(raw->str, &endptr);
+    if(!obj)
+        goto fail_parse;
+
+    tracker_announce_resp_t *ret = malloc(sizeof(tracker_announce_resp_t));
+    if(!ret)
+        goto fail_alloc;
+    memset(ret, 0, sizeof(*ret));
+
+    assert(obj->type == BENCODE_TYPE_DICT);
+    const char *key;
+    const unsigned char *val;
+
+    FOREACH_KEY_AND_VAL(key, val, ((bencode_obj_t*)obj)->data.dictionary) {
+        if(!strcmp(key, "failure reason")) {
+            char *str = (char*)((bencode_obj_t*)val)->data.string->str;
+            ret->failure_reason =  malloc(strlen(str) + 1);
+            memcpy(ret->failure_reason, str, strlen(str) + 1); 
+            SET_HAS(ret, RESPONSE_HAS_FAILURE_REASON);
+        }
+
+        if(!strcmp(key, "warning message")) {
+            char *str = (char*)((bencode_obj_t*)val)->data.string->str;
+            ret->warning_message =  malloc(strlen(str) + 1);
+            memcpy(ret->warning_message, str, strlen(str) + 1); 
+            SET_HAS(ret, RESPONSE_HAS_WARNING_MESSAGE);
+        }
+
+        if(!strcmp(key, "interval")) {
+            ret->interval = ((bencode_obj_t*)val)->data.integer;
+        }
+
+        if(!strcmp(key, "min interval")) {
+            ret->min_interval = ((bencode_obj_t*)val)->data.integer;
+            SET_HAS(ret, RESPONSE_HAS_MIN_INTERVAL);
+        }
+
+        if(!strcmp(key, "tracker id")) {
+            char *str = (char*)((bencode_obj_t*)val)->data.string->str;
+            ret->tracker_id =  malloc(strlen(str) + 1);
+            memcpy(ret->tracker_id, str, strlen(str) + 1); 
+            SET_HAS(ret, RESPONSE_HAS_TRACKER_ID);
+        }
+
+        if(!strcmp(key, "complete")) {
+            ret->complete = ((bencode_obj_t*)val)->data.integer;
+        }
+
+        if(!strcmp(key, "incomplete")) {
+            ret->incomplete = ((bencode_obj_t*)val)->data.integer;
+        }
+
+        if(!strcmp(key, "peers")) {
+            if(((bencode_obj_t*)val)->type == BENCODE_TYPE_STRING) {
+                ret->peers = parse_peerlist(((bencode_obj_t*)val)->data.string);
+            }else {
+                //TODO: parse peers in dictionary format
+                assert(0);
+            }
+        }
+    }
+
+    bencode_free_obj_and_data_recursive(obj);
+    return ret;
+
+fail_alloc:
+fail_parse:
+    return NULL;
+}
+
+tracker_announce_resp_t *tracker_announce(const char *urlstr, tracker_announce_request_t *request)
 {
     int sockfd;
-    byte_str_t *resp;
+    byte_str_t *raw;
+    tracker_announce_resp_t *ret;
 
     url_t *url = url_from_str(urlstr);
     if(!url)
@@ -238,15 +345,21 @@ int tracker_announce(const char *urlstr, tracker_announce_request_t *request, tr
     if(tracker_sendall(sockfd, request_str, strlen(request_str)) < 0)
         goto fail_send;
 
-    if(tracker_recv_resp(sockfd, &resp) < 0)
+    if(tracker_recv_resp(sockfd, &raw) < 0)
         goto fail_recv;
+
+    ret = parse_tracker_response(raw);
+    if(!ret)
+        goto fail_parse;
 
     url_free(url);
     free(request_str);
+    byte_str_free(raw); 
 
-    tc(resp);
-    return 0;
+    return ret;
 
+fail_parse:
+    byte_str_free(raw);
 fail_recv:
 fail_send:
     close(sockfd);
@@ -254,6 +367,16 @@ fail_connect:
     url_free(url);
 fail_parse_url:
     free(request_str);
-    return -1;
+    return NULL;
+}
+
+void tracker_announce_request_free(tracker_announce_request_t *req)
+{
+
+}
+
+void tracker_announce_resp_free(tracker_announce_resp_t *resp)
+{
+
 }
 
