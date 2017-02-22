@@ -121,7 +121,6 @@ static bencode_obj_t *bencode_parse_int(const char *benc, const char **endptr)
 static bencode_obj_t *bencode_parse_dict(const char *benc, const char **endptr)
 {
     bencode_obj_t *ret;
-    const char * const start = benc;
 
     assert(*benc == 'd');    
     *endptr = benc + 1;
@@ -141,6 +140,13 @@ static bencode_obj_t *bencode_parse_dict(const char *benc, const char **endptr)
         bencode_obj_t *value = bencode_parse_object(benc, endptr);
         assert(value);
         assert(*endptr > benc);
+
+        if(!strcmp((char*)key->data.string->str, "info")) {
+            assert(benc[0] == 'd');
+            assert((*endptr)[-1] == 'e');
+            printf("sha1 computed!\n");
+            sha1_compute(benc, *endptr - benc, value->sha1);
+        }
         
         dict_add(ret->data.dictionary, (char*)key->data.string->str, 
             (unsigned char*)&value, sizeof(value));
@@ -151,12 +157,14 @@ static bencode_obj_t *bencode_parse_dict(const char *benc, const char **endptr)
     assert(**endptr == 'e');
     (*endptr)++;
 
+#if 0
     if(!strncmp(start - strlen("info"), "info", strlen("info"))) {
         assert(start[0] == 'd');
         assert(start[*endptr - start - 1] == 'e');
         printf("sha1 computed!\n");
         sha1_compute(start, *endptr - start, ret->sha1);
     }
+#endif
 
     return ret;
 }
