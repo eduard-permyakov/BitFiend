@@ -1,4 +1,5 @@
 #include "tracker_connection.h"
+#include "torrent.h"
 #include "byte_str.h"
 #include "tracker_announce.h"
 #include "peer_id.h"
@@ -36,21 +37,35 @@ static tracker_announce_request_t *create_tracker_request(void *arg)
 
 static void *periodic_annouce_cleanup(void *arg)
 {
-    //send announce with "stopped" event
+    printf("Sending a stop event to tracker and gracefully cleaning up tracker thread\n");
+
+    tracker_arg_t *targ = (tracker_arg_t*)arg;
+
+    tracker_announce_request_t *req = create_tracker_request(arg);
+    req->event = TORRENT_EVENT_STOPPED;
+    SET_HAS(req, REQUEST_HAS_EVENT);
+    
+    tracker_announce_resp_t *resp = tracker_announce(targ->torrent->announce, req);
+
+    tracker_announce_request_free(req);
+    tracker_announce_resp_free(resp);
+    free(arg);
+
+    pthread_exit(NULL);
 }
 
 static void *periodic_announce(void *arg)
 {
+    printf("periodic announce top\n");
     tracker_arg_t *targ = (tracker_arg_t*)arg;
     bool completed;
-    const char *announce;
     unsigned interval;
+    interval = 10; //temp - get this from resp
 
     pthread_cleanup_push(periodic_annouce_cleanup, arg);
 
     pthread_mutex_lock(&targ->torrent->torrent_lock);
     completed = targ->torrent->completed;
-    announce = targ->torrent->announce;
     pthread_mutex_unlock(&targ->torrent->torrent_lock);
 
     tracker_announce_request_t *req = create_tracker_request(arg);
@@ -58,14 +73,12 @@ static void *periodic_announce(void *arg)
 
     req->event = TORRENT_EVENT_STARTED;
     SET_HAS(req, REQUEST_HAS_EVENT);
-    resp = tracker_announce(announce, req);
+    resp = tracker_announce(targ->torrent->announce, req);
 
     printf("Received response for tracker announce started event\n");
 
-    free(req);
-    free(resp);
-
-
+    tracker_announce_request_free(req);
+    tracker_announce_resp_free(resp);
 
     while(true) {
         pthread_testcancel();        
@@ -80,26 +93,29 @@ static void *periodic_announce(void *arg)
         completed = targ->torrent->completed;
         pthread_mutex_unlock(&targ->torrent->torrent_lock);
 
-        resp = tracker_announce(announce, req);
+        resp = tracker_announce(targ->torrent->announce, req);
 
-        printf("Received response for periodic tracker annouce\n");
+        extern void print_tracker_response(tracker_announce_resp_t *resp);
+        print_tracker_response(resp);
 
-        free(req);
-        free(resp);
+        tracker_announce_request_free(req);
+        tracker_announce_resp_free(resp);
 
         //update the peer list of the torrent here
+
+        printf("About to sleep for %u seconds, but can be woken up\n", interval);
     
         struct timespec wakeup_time;
         struct timeval now;
 
         gettimeofday(&now, NULL);
         wakeup_time.tv_sec = now.tv_sec + interval;
-        wakeup_time.tv_nsec = now.tv_usec * 1000000;
+        wakeup_time.tv_nsec = now.tv_usec * 1000;
 
-        pthread_mutex_lock(&targ->torrent->tracker_cond_mutex);
-        pthread_cond_timedwait(&targ->torrent->tracker_cond_sleep, &targ->torrent->tracker_cond_mutex, 
-            &wakeup_time);
-        pthread_mutex_unlock(&targ->torrent->tracker_cond_mutex);
+        tracker_conn_t *conn = &targ->torrent->tracker_conn;
+        pthread_mutex_lock(&conn->cond_mutex);
+        pthread_cond_timedwait(&conn->sleep_cond, &conn->cond_mutex, &wakeup_time);
+        pthread_mutex_unlock(&conn->cond_mutex);
     }
     
     pthread_cleanup_pop(0);
@@ -108,7 +124,8 @@ static void *periodic_announce(void *arg)
 
 int tracker_connection_create(pthread_t *thread, tracker_arg_t *arg)
 {
-    if(pthread_create(thread, NULL, periodic_announce, (void*)arg));
+    int rv;
+    if(pthread_create(thread, NULL, periodic_announce, (void*)arg))
         goto fail_create_thread;
 
     return 0;

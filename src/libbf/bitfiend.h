@@ -2,6 +2,7 @@
 #define BITFIEND_H
 
 #include "torrent.h"
+//TODO change api to return void pointer
 
 enum{
     BITFIEND_FAILURE = -1,

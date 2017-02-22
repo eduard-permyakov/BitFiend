@@ -46,6 +46,7 @@ static torrent_file_t *torrent_file_open(const char *path)
     return file;
 
 fail_alloc:
+    munmap(file->data, file->size);
 fail_map:
     close(fd);
 fail_open:
@@ -85,7 +86,6 @@ bencode_obj_t *torrent_file_parse(const char *path)
     return ret;
 
 fail_open:
-    torrent_file_close_and_free(file);
     return NULL;
 }
 

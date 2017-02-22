@@ -215,6 +215,7 @@ static int tracker_recv_resp(int sockfd, byte_str_t **outcont)
         tot_recv += nb;
     }while(nb > 0);
 
+    printf("\n%.*s\n", (int)tot_recv, buff);
     *outcont = content_from_tracker_resp(buff, tot_recv);
     
     return 0;
@@ -268,23 +269,23 @@ static tracker_announce_resp_t *parse_tracker_response(const byte_str_t *raw)
     const char *key;
     const unsigned char *val;
 
-    FOREACH_KEY_AND_VAL(key, val, ((bencode_obj_t*)obj)->data.dictionary) {
+    FOREACH_KEY_AND_VAL(key, val, obj->data.dictionary) {
         if(!strcmp(key, "failure reason")) {
-            char *str = (char*)((bencode_obj_t*)val)->data.string->str;
+            char *str = (char*)(*(bencode_obj_t**)val)->data.string->str;
             ret->failure_reason =  malloc(strlen(str) + 1);
             memcpy(ret->failure_reason, str, strlen(str) + 1); 
             SET_HAS(ret, RESPONSE_HAS_FAILURE_REASON);
         }
 
         if(!strcmp(key, "warning message")) {
-            char *str = (char*)((bencode_obj_t*)val)->data.string->str;
+            char *str = (char*)(*(bencode_obj_t**)val)->data.string->str;
             ret->warning_message =  malloc(strlen(str) + 1);
             memcpy(ret->warning_message, str, strlen(str) + 1); 
             SET_HAS(ret, RESPONSE_HAS_WARNING_MESSAGE);
         }
 
         if(!strcmp(key, "interval")) {
-            ret->interval = ((bencode_obj_t*)val)->data.integer;
+            ret->interval = (*(bencode_obj_t**)val)->data.integer;
         }
 
         if(!strcmp(key, "min interval")) {
@@ -293,25 +294,25 @@ static tracker_announce_resp_t *parse_tracker_response(const byte_str_t *raw)
         }
 
         if(!strcmp(key, "tracker id")) {
-            char *str = (char*)((bencode_obj_t*)val)->data.string->str;
+            char *str = (char*)(*(bencode_obj_t**)val)->data.string->str;
             ret->tracker_id =  malloc(strlen(str) + 1);
             memcpy(ret->tracker_id, str, strlen(str) + 1); 
             SET_HAS(ret, RESPONSE_HAS_TRACKER_ID);
         }
 
         if(!strcmp(key, "complete")) {
-            ret->complete = ((bencode_obj_t*)val)->data.integer;
+            ret->complete = (*(bencode_obj_t**)val)->data.integer;
         }
 
         if(!strcmp(key, "incomplete")) {
-            ret->incomplete = ((bencode_obj_t*)val)->data.integer;
+            ret->incomplete = (*(bencode_obj_t**)val)->data.integer;
         }
 
         if(!strcmp(key, "peers")) {
-            if(((bencode_obj_t*)val)->type == BENCODE_TYPE_STRING) {
-                ret->peers = parse_peerlist(((bencode_obj_t*)val)->data.string);
+            if((*(bencode_obj_t**)val)->type == BENCODE_TYPE_STRING) {
+                ret->peers = parse_peerlist((*(bencode_obj_t**)val)->data.string);
             }else {
-                //TODO: parse peers in dictionary format
+                //TODO: parse peers in list of dictionaries format
                 assert(0);
             }
         }
@@ -378,5 +379,22 @@ void tracker_announce_request_free(tracker_announce_request_t *req)
 void tracker_announce_resp_free(tracker_announce_resp_t *resp)
 {
 
+}
+
+//TEMP
+
+void print_tracker_response(tracker_announce_resp_t *resp)
+{
+    printf("TRACKER RESPONSE\n");
+    printf("\tinterval: %u\n", resp->interval); 
+    if(HAS(resp, RESPONSE_HAS_TRACKER_ID))
+        printf("\ttracker_id: %s\n", resp->tracker_id);
+    printf("\tcomplete: %u\n", resp->complete); 
+    printf("\tincomplete: %u\n", resp->incomplete); 
+    printf("\tpeers: %p, size: %u\n", resp->peers, list_get_size(resp->peers));
+    if(HAS(resp, RESPONSE_HAS_FAILURE_REASON))
+        printf("\tfailure reason: %s\n", resp->failure_reason);
+    if(HAS(resp, RESPONSE_HAS_WARNING_MESSAGE))
+        printf("\twarning message: %s\n", resp->warning_message);
 }
 

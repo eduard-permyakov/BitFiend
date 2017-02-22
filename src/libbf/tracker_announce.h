@@ -52,10 +52,10 @@ typedef struct tracker_announce_request {
 
 typedef struct tracker_announce_resp {
     char has;
-    int64_t interval;
+    unsigned interval;
     char *tracker_id;
-    int64_t complete;
-    int64_t incomplete;
+    unsigned complete;
+    unsigned incomplete;
     list_t *peers;
     char *failure_reason;
     char *warning_message;

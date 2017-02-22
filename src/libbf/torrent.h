@@ -3,6 +3,10 @@
 
 #include <pthread.h>
 #include "list.h"
+#include "tracker_connection.h"
+#include "bencode.h"
+
+#define DEFAULT_PRIORITY 3
 
 typedef enum {
     TORRENT_STATE_LEECHING,
@@ -12,10 +16,11 @@ typedef enum {
 
 typedef struct torrent {
     pthread_mutex_t     torrent_lock;
-    list_t             *peices;
+    list_t             *pieces;
+    unsigned            piece_len;
     list_t             *files;
     list_t             *peer_connections;
-    unsigned            priority;
+    unsigned            priority;           /* [0-6] */
     torrent_state_t     state;
     float               progress;           /* [0-1] */
     float               upspeed;            /* bits/sec */
@@ -24,14 +29,14 @@ typedef struct torrent {
     unsigned            downloaded;         /* bytes */
     bool                completed;
     char                info_hash[20];
-    char                local_peer_id[20];
-    const char         *announce;
-    pthread_t           tracker_thread;
-    pthread_mutex_t     tracker_cond_mutex;
-    pthread_cond_t      tracker_cond_sleep;
+    char               *announce;
+    char               *comment;
+    char               *created_by;
+    uint32_t            create_date;
+    tracker_conn_t      tracker_conn;
 }torrent_t;
 
-torrent_t  *torrent_new(void);
+torrent_t  *torrent_init(bencode_obj_t *meta);
 void        torrent_free(torrent_t *torrent);
 unsigned    torrent_left_to_download(torrent_t *torrent);
 

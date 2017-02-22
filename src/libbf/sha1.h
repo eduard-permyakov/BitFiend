@@ -5,6 +5,6 @@
 
 #define DIGEST_LEN 20
 
-int sha1_compute(const char *msg, size_t len, char digest[20]);
+int sha1_compute(const char *msg, size_t len, char digest[DIGEST_LEN]);
 
 #endif
