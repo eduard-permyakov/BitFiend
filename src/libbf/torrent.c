@@ -93,7 +93,16 @@ torrent_t *torrent_init(bencode_obj_t *meta)
             ret->create_date = (*(bencode_obj_t**)val)->data.integer;
         }
 
-        //TODO: support "announce-list" and "encoding"
+        if(!strcmp(key, "announce-list")) {
+            printf("WARNINIG: ignoring announce-list\n");
+            //TODO
+        }
+
+        if(!strcmp(key, "encoding")) {
+            assert(0);
+            //TODO
+        }
+
     }
 
     pthread_mutex_init(&ret->torrent_lock, NULL); 
@@ -108,9 +117,6 @@ torrent_t *torrent_init(bencode_obj_t *meta)
     ret->uploaded = 0;  
     ret->downloaded = 0;
     ret->completed = false;
-
-    pthread_mutex_init(&ret->tracker_conn.cond_mutex, NULL);
-    pthread_cond_init(&ret->tracker_conn.sleep_cond, NULL); 
     
     return ret;
 
@@ -120,7 +126,35 @@ fail_alloc:
 
 void torrent_free(torrent_t *torrent)
 {
+    const unsigned char *entry;
 
+    pthread_mutex_destroy(&torrent->torrent_lock);
+
+    FOREACH_ENTRY(entry, torrent->pieces){
+        byte_str_free(*(byte_str_t**)entry);
+    }
+    list_free(torrent->pieces);
+
+    FOREACH_ENTRY(entry, torrent->files){
+        //TODO
+    }
+    list_free(torrent->files);
+
+    FOREACH_ENTRY(entry, torrent->peer_connections) {
+        //TODO
+    }
+    list_free(torrent->peer_connections);
+
+    if(torrent->announce) 
+        free(torrent->announce);
+
+    if(torrent->comment)    
+        free(torrent->comment);
+
+    if(torrent->created_by)
+        free(torrent->created_by);
+
+    free(torrent);
 }
 
 unsigned torrent_left_to_download(torrent_t *torrent)

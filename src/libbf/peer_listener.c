@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
-#include <fcntl.h>
+//#include <fcntl.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -54,21 +54,21 @@ static int bind_listener(const uint16_t port)
     if(!listener)
         goto fail_bind;
 
-    free(head);
+    freeaddrinfo(head);
     return sockfd;
 
 fail_bind:
     printf("fail bind 2\n");
-    free(head);
+    freeaddrinfo(head);
 fail_getaddrinfo:
     printf("fail getaddrinfo\n");
     return -1;
 }
 
-static void *peer_listen_cleanup(void *arg)
+static void peer_listen_cleanup(void *arg)
 {
-    printf("Closing listener socket....\n");
     int sockfd = *(int*)arg;
+    printf("Closing listener socket %d ....\n", sockfd);
     close(sockfd);
 }
 
@@ -81,20 +81,18 @@ static void *peer_listen(void *arg)
     if(listen(sockfd, LISTEN_QUEUE_SIZE) < 0)
         goto fail_listen;
 
-    fcntl(sockfd, F_SETFL, O_NONBLOCK);
+    //fcntl(sockfd, F_SETFL, O_NONBLOCK);
 
     pthread_cleanup_push(peer_listen_cleanup, (void*)&sockfd);
 
     while(true) {
         printf("Listening for peers...\n");
-        sleep(5);
-
-        pthread_testcancel();
 
         struct sockaddr peer;
         socklen_t len = sizeof(peer);
         int peer_sockfd;
         
+        /* Cancellation point */
         peer_sockfd = accept(sockfd, &peer, &len);
         if(errno == EAGAIN || errno == EWOULDBLOCK)   
             continue;

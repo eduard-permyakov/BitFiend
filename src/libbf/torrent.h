@@ -33,7 +33,7 @@ typedef struct torrent {
     char               *comment;
     char               *created_by;
     uint32_t            create_date;
-    tracker_conn_t      tracker_conn;
+    pthread_t           tracker_thread;
 }torrent_t;
 
 torrent_t  *torrent_init(bencode_obj_t *meta);

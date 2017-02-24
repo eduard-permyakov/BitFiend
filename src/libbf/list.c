@@ -127,7 +127,10 @@ bool list_contains(list_t *list, unsigned char *data)
 
 const list_iter_t *list_iter_first(const list_t *list)
 {
-    return &(list->head->iter);
+    if(list->head)
+        return &(list->head->iter);
+    else 
+        return NULL;
 }
 
 const list_iter_t *list_iter_next(const list_iter_t *iter)

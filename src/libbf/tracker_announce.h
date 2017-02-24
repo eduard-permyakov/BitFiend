@@ -64,7 +64,11 @@ typedef struct tracker_announce_resp {
 
 typedef struct peer{
     char peer_id[20];
-    struct sockaddr_in ip;
+    union {
+        struct sockaddr_storage sas;
+        struct sockaddr_in sa_in;
+        struct sockaddr_in6 sa_in6;
+    };
 }peer_t;
 
 tracker_announce_resp_t *tracker_announce(const char *urlstr, tracker_announce_request_t *request);

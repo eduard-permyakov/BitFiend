@@ -13,6 +13,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <arpa/inet.h> //temp
 
 
 static bool is_valid_url_char(const unsigned char c)
@@ -142,11 +143,11 @@ static int tracker_connect(url_t *url)
     if(!tracker)
         goto fail_connect;
 
-    free(head);
+    freeaddrinfo(head);
     return sockfd;
 
 fail_connect:
-    free(head);
+    freeaddrinfo(head);
 fail_getaddrinfo:
     return -1;
 }
@@ -215,13 +216,14 @@ static int tracker_recv_resp(int sockfd, byte_str_t **outcont)
         tot_recv += nb;
     }while(nb > 0);
 
-    printf("\n%.*s\n", (int)tot_recv, buff);
     *outcont = content_from_tracker_resp(buff, tot_recv);
+    if(!*outcont)
+        return -1;
     
     return 0;
 }
 
-static list_t *parse_peerlist(byte_str_t *raw)
+static list_t *parse_peerlist_str(byte_str_t *raw)
 {
     list_t *peers = list_init();
     if(!peers)
@@ -237,16 +239,74 @@ static list_t *parse_peerlist(byte_str_t *raw)
         memcpy(&port, raw->str + i + sizeof(uint32_t), sizeof(uint16_t));
 
         peer_t *peer = malloc(sizeof(peer_t));
-        peer->ip.sin_family = AF_INET;
-        peer->ip.sin_addr.s_addr = ip;
-        peer->ip.sin_port = port;
-        memset(peer->ip.sin_zero, 0, sizeof(peer->ip.sin_zero));
+        struct sockaddr_in ipv4;
+        peer->sas.ss_family = AF_INET;
+        peer->sa_in.sin_addr.s_addr = ip;
+        peer->sa_in.sin_port = port;
+        memset(peer->sa_in.sin_zero, 0, sizeof(peer->sa_in.sin_zero));
 
         memset(peer->peer_id, 0, sizeof(peer->peer_id));
 
         list_add(peers, (unsigned char*)&peer, sizeof(peer));
     }
 
+    return peers;
+
+fail_alloc:
+    return NULL;
+}
+
+static list_t *parse_peerlist_list(list_t *list)
+{    
+    printf("WARNING: PARSING PEERS FROM LIST OF DICS - UNTESTED\n");
+    list_t *peers = list_init();
+    if(!peers)
+        goto fail_alloc;
+
+    const unsigned char *entry;
+    FOREACH_ENTRY(entry, list) {
+        printf("here\n");
+
+        bencode_obj_t *peer_dict = *((bencode_obj_t**)entry);
+        peer_t *peer = malloc(sizeof(peer_t));
+
+        const char *key;
+        const unsigned char *val;
+        FOREACH_KEY_AND_VAL(key, val, peer_dict->data.dictionary) {
+
+            if(!strcmp(key, "id")) {
+                memcpy(peer->peer_id, (*(bencode_obj_t**)val)->data.string->str, 20);
+            }
+
+            if(!strcmp(key, "ip")) {
+                char *ipstr = (char*)(*(bencode_obj_t**)val)->data.string->str;
+                struct addrinfo hint, *res = NULL; 
+
+                memset(&hint, 0, sizeof(hint));
+                hint.ai_family = PF_UNSPEC;
+                hint.ai_flags = AI_NUMERICHOST;
+
+                int ret = getaddrinfo(ipstr, NULL, &hint, &res);
+                if(!ret) {
+                    memcpy(&peer->sas, res->ai_addr, sizeof(struct sockaddr));
+                    freeaddrinfo(res);
+                }
+            }
+
+            if(!strcmp(key, "port")) {
+                uint16_t port = (uint16_t)(*(bencode_obj_t**)val)->data.integer;
+
+                if(peer->sas.ss_family = AF_INET) {
+                    peer->sa_in.sin_port = htons(port);
+                }else{
+                    peer->sa_in6.sin6_port = htons(port);
+                }
+            }
+        }
+
+        list_add(peers, (unsigned char*)&peer, sizeof(peer_t*));
+
+    }
     return peers;
 
 fail_alloc:
@@ -310,11 +370,15 @@ static tracker_announce_resp_t *parse_tracker_response(const byte_str_t *raw)
 
         if(!strcmp(key, "peers")) {
             if((*(bencode_obj_t**)val)->type == BENCODE_TYPE_STRING) {
-                ret->peers = parse_peerlist((*(bencode_obj_t**)val)->data.string);
+                ret->peers = parse_peerlist_str((*(bencode_obj_t**)val)->data.string);
             }else {
-                //TODO: parse peers in list of dictionaries format
-                assert(0);
+                ret->peers = parse_peerlist_list((*(bencode_obj_t**)val)->data.list);
             }
+        }
+
+        if(!strcmp(key, "peers_ipv6")) {
+            //TODO
+            assert(0);
         }
     }
 
@@ -337,8 +401,6 @@ tracker_announce_resp_t *tracker_announce(const char *urlstr, tracker_announce_r
         goto fail_parse_url;
 
     char *request_str = build_http_request(urlstr, request);
-
-    printf("HTTP REQUEST:%s\n", request_str);
 
     if((sockfd = tracker_connect(url)) < 0)
         goto fail_connect;
@@ -373,25 +435,65 @@ fail_parse_url:
 
 void tracker_announce_request_free(tracker_announce_request_t *req)
 {
-
+    if(HAS(req, REQUEST_HAS_TRACKER_ID))
+        free(req->tracker_id);
+        
+    if(HAS(req, REQUEST_HAS_KEY))
+        free(req->key);
+    
+    free(req);
 }
 
 void tracker_announce_resp_free(tracker_announce_resp_t *resp)
 {
+    if(HAS(resp, RESPONSE_HAS_TRACKER_ID))
+        free(resp->tracker_id);
 
+    if(HAS(resp, RESPONSE_HAS_FAILURE_REASON))
+        free(resp->failure_reason);
+
+    if(HAS(resp, RESPONSE_HAS_WARNING_MESSAGE))
+        free(resp->warning_message);
+
+    const unsigned char *entry;
+    FOREACH_ENTRY(entry, resp->peers) {
+        peer_t *peer = *((peer_t**)entry);
+        free(peer);
+    }
+    list_free(resp->peers);
+
+    free(resp);
 }
 
 //TEMP
 
 void print_tracker_response(tracker_announce_resp_t *resp)
 {
-    printf("TRACKER RESPONSE\n");
+    printf("TRACKER RESPONSE:\n");
     printf("\tinterval: %u\n", resp->interval); 
     if(HAS(resp, RESPONSE_HAS_TRACKER_ID))
         printf("\ttracker_id: %s\n", resp->tracker_id);
     printf("\tcomplete: %u\n", resp->complete); 
     printf("\tincomplete: %u\n", resp->incomplete); 
     printf("\tpeers: %p, size: %u\n", resp->peers, list_get_size(resp->peers));
+
+    const unsigned char *entry;
+    FOREACH_ENTRY(entry, resp->peers) {
+        peer_t *peer = *((peer_t**)entry);
+
+        char buff[INET6_ADDRSTRLEN];
+        uint16_t port;
+        //assume ipv4
+        if(peer->sas.ss_family == AF_INET) {
+            inet_ntop(AF_INET, &peer->sa_in.sin_addr, buff, INET_ADDRSTRLEN); 
+            port = peer->sa_in.sin_port;
+        }else{
+            inet_ntop(AF_INET6, &peer->sa_in6.sin6_addr, buff, INET6_ADDRSTRLEN);        
+            port = peer->sa_in6.sin6_port;
+        }
+        printf("\t\tpeer: %s [port: %u]\n", buff, port); 
+    }
+
     if(HAS(resp, RESPONSE_HAS_FAILURE_REASON))
         printf("\tfailure reason: %s\n", resp->failure_reason);
     if(HAS(resp, RESPONSE_HAS_WARNING_MESSAGE))
