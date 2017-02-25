@@ -41,12 +41,12 @@ static int print_url_encoded_str(char *out, size_t n, const unsigned char *orig,
     return written;
 }
 
-static char *build_http_request(const char *urlstr, tracker_announce_request_t *request)
+static char *build_http_request(url_t *url, tracker_announce_request_t *request)
 {
     int written = 0;
     char buff[512];
 
-    written += snprintf(buff, sizeof(buff), "GET %s", urlstr);
+    written += snprintf(buff, sizeof(buff), "GET /%s", url->path);
 
     written += snprintf(buff + written, sizeof(buff) - written, "?info_hash=");
     written += print_url_encoded_str(buff + written, sizeof(buff) - written, request->info_hash, 20);
@@ -101,7 +101,8 @@ static char *build_http_request(const char *urlstr, tracker_announce_request_t *
         written += snprintf(buff + written, sizeof(buff) - written, "&trackerid=%s", request->tracker_id);
     }
 
-    written += snprintf(buff + written, sizeof(buff) - written, " HTTP/1.0\r\n\r\n");
+    written += snprintf(buff + written, sizeof(buff) - written, " HTTP/1.1\r\n");
+    written += snprintf(buff + written, sizeof(buff) - written, "Host: %s\r\n\r\n", url->hostname);
 
     assert(written < sizeof(buff));
     buff[written] = '\0';
@@ -150,6 +151,7 @@ static int tracker_connect(url_t *url)
     }
 
     freeaddrinfo(head);
+    errno = 0;
     log_printf(LOG_LEVEL_INFO, "Successfully connected (socket fd: %d) to tracker: %s\n", 
         sockfd, url->hostname);
     return sockfd;
@@ -164,36 +166,29 @@ static byte_str_t *content_from_tracker_resp(char *buff, size_t len)
 {
     char *line,*saveptr;
     char *token, *saveptrtok;
-    unsigned cont_len;
+    unsigned cont_len = 0;
 
     line = strtok_r(buff, "\n", &saveptr);
-    if(strncmp(line, "HTTP/1.0 200 OK", strlen("HTTP/1.0 200 OK")))
+    if(strncmp(line, "HTTP/1.0 200 OK", strlen("HTTP/1.0 200 OK")) &&
+       strncmp(line, "HTTP/1.1 200 OK", strlen("HTTP/1.1 200 OK")))
         goto fail_parse;
 
-    line = strtok_r(NULL, "\n", &saveptr);
-    if(strncmp(line, "Content-Length:", strlen("Content-Length:")))
-        goto fail_parse;
-    token = strtok_r(line, ":", &saveptrtok);
-    token = strtok_r(NULL, ":", &saveptrtok);
-    cont_len = strtoul(token, NULL, 0);
+    do {
+        line = strtok_r(NULL, "\n", &saveptr);
 
-    line = strtok_r(NULL, "\n", &saveptr);
-    if(strncmp(line, "Content-Type: text/plain", strlen("Content-Type: text/plain")))
-        goto fail_parse;
-
-    line = strtok_r(NULL, "\n", &saveptr);
-    if(strncmp(line, "Pragma", strlen("Pragma")))
-        goto fail_parse;
-
-    line = strtok_r(NULL, "\n", &saveptr);
-    if(strlen(line) != 1)
-        goto fail_parse;
+        if(!strncmp(line, "Content-Length:", strlen("Content-Length:"))) {
+            token = strtok_r(line, ":", &saveptrtok);
+            token = strtok_r(NULL, ":", &saveptrtok);
+            cont_len = strtoul(token, NULL, 0);
+        }
+        
+    }while(strlen(line) != 1);
 
     byte_str_t *ret = byte_str_new(cont_len, line + strlen(line) + 1);
     return ret;
 
 fail_parse:
-    log_printf(LOG_LEVEL_ERROR, "Unable to extract Content from tracker HTTP response\n");
+    log_printf(LOG_LEVEL_ERROR, "Tracker returned non-OK HTTP response\n");
     return NULL; 
 }
 
@@ -247,7 +242,8 @@ tracker_announce_resp_t *tracker_announce(const char *urlstr, tracker_announce_r
     if(!url)
         goto fail_parse_url;
 
-    char *request_str = build_http_request(urlstr, request);
+    char *request_str = build_http_request(url, request);
+    log_printf(LOG_LEVEL_DEBUG, "%s", request_str);
 
     if((sockfd = tracker_connect(url)) < 0)
         goto fail_connect;
@@ -281,7 +277,7 @@ fail_parse_url:
 
     if(errno) {
         strerror_r(errno, errbuff, sizeof(errbuff));
-        log_printf(LOG_LEVEL_ERROR, "%s", errbuff);
+        log_printf(LOG_LEVEL_ERROR, "%s\n", errbuff);
     }
     return NULL;
 }

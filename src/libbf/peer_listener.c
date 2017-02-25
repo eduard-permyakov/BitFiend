@@ -111,7 +111,7 @@ fail_listen:
 fail_bind:
     if(errno){
         strerror_r(errno, errbuff, sizeof(errbuff));
-        log_printf(LOG_LEVEL_ERROR, "%s", errbuff);
+        log_printf(LOG_LEVEL_ERROR, "%s\n", errbuff);
     }
     pthread_exit(NULL);
 }
