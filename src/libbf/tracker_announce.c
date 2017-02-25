@@ -2,6 +2,7 @@
 #include "url.h"
 #include "bencode.h"
 #include "tracker_resp_parser.h"
+#include "log.h"
 
 #include <stdio.h>
 #include <stdbool.h>
@@ -10,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -63,7 +65,8 @@ static char *build_http_request(const char *urlstr, tracker_announce_request_t *
     }
 
     if(HAS(request, REQUEST_HAS_NO_PEER_ID)) {
-        written += snprintf(buff + written, sizeof(buff) - written, "&no_peer_id=%1hhu", !!(request->no_peer_id));
+        written += snprintf(buff + written, sizeof(buff) - written, "&no_peer_id=%1hhu", 
+            !!(request->no_peer_id));
     }
 
     if(HAS(request, REQUEST_HAS_EVENT)) {
@@ -141,10 +144,14 @@ static int tracker_connect(url_t *url)
         break;
     }
     
-    if(!tracker)
+    if(!tracker){
+        log_printf(LOG_LEVEL_ERROR, "Unable to connect to tracker: %s\n", url->hostname);
         goto fail_connect;
+    }
 
     freeaddrinfo(head);
+    log_printf(LOG_LEVEL_INFO, "Successfully connected (socket fd: %d) to tracker: %s\n", 
+        sockfd, url->hostname);
     return sockfd;
 
 fail_connect:
@@ -186,6 +193,7 @@ static byte_str_t *content_from_tracker_resp(char *buff, size_t len)
     return ret;
 
 fail_parse:
+    log_printf(LOG_LEVEL_ERROR, "Unable to extract Content from tracker HTTP response\n");
     return NULL; 
 }
 
@@ -217,6 +225,8 @@ static int tracker_recv_resp(int sockfd, byte_str_t **outcont)
         tot_recv += nb;
     }while(nb > 0);
 
+    log_printf(LOG_LEVEL_INFO, "Tracker HTTP response received\n");
+
     *outcont = content_from_tracker_resp(buff, tot_recv);
     if(!*outcont)
         return -1;
@@ -229,6 +239,9 @@ tracker_announce_resp_t *tracker_announce(const char *urlstr, tracker_announce_r
     int sockfd;
     byte_str_t *raw;
     tracker_announce_resp_t *ret;
+    char errbuff[64];
+
+    log_printf(LOG_LEVEL_INFO, "Announcing to tracker: %s\n", urlstr);
 
     url_t *url = url_from_str(urlstr);
     if(!url)
@@ -249,6 +262,7 @@ tracker_announce_resp_t *tracker_announce(const char *urlstr, tracker_announce_r
     if(!ret)
         goto fail_parse;
 
+    close(sockfd);
     url_free(url);
     free(request_str);
     byte_str_free(raw); 
@@ -264,6 +278,11 @@ fail_connect:
     url_free(url);
 fail_parse_url:
     free(request_str);
+
+    if(errno) {
+        strerror_r(errno, errbuff, sizeof(errbuff));
+        log_printf(LOG_LEVEL_ERROR, "%s", errbuff);
+    }
     return NULL;
 }
 

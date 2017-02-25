@@ -1,5 +1,6 @@
 #include "torrent.h"
 #include "byte_str.h"
+#include "log.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -50,7 +51,6 @@ static void populate_from_info_dic(torrent_t *ret, dict_t *info)
 
 torrent_t *torrent_init(bencode_obj_t *meta)
 {
-    printf("torrent init\n");
     torrent_t *ret = malloc(sizeof(torrent_t));
     if(!ret)
         goto fail_alloc;
@@ -94,7 +94,7 @@ torrent_t *torrent_init(bencode_obj_t *meta)
         }
 
         if(!strcmp(key, "announce-list")) {
-            printf("WARNINIG: ignoring announce-list\n");
+            log_printf(LOG_LEVEL_WARNING, "Ignoring announce-list key in metainfo file\n");
             //TODO
         }
 

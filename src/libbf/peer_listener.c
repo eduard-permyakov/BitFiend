@@ -1,4 +1,5 @@
 #include "peer_listener.h"
+#include "log.h"
 
 #include <stdbool.h>
 #include <string.h>
@@ -6,7 +7,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
-//#include <fcntl.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -55,38 +55,38 @@ static int bind_listener(const uint16_t port)
         goto fail_bind;
 
     freeaddrinfo(head);
+    log_printf(LOG_LEVEL_INFO, "Successfully bound peer listener socket (fd: %d) on port %hd\n", 
+        sockfd, port);
     return sockfd;
 
 fail_bind:
-    printf("fail bind 2\n");
     freeaddrinfo(head);
 fail_getaddrinfo:
-    printf("fail getaddrinfo\n");
     return -1;
 }
 
 static void peer_listen_cleanup(void *arg)
 {
     int sockfd = *(int*)arg;
-    printf("Closing listener socket %d ....\n", sockfd);
+    log_printf(LOG_LEVEL_INFO, "Closing peer listener socket (fd: %d)\n", sockfd);
     close(sockfd);
 }
 
 static void *peer_listen(void *arg)
 {
     int sockfd;
+    char errbuff[64];
+
     if((sockfd = bind_listener(*(const uint16_t*)arg)) < 0)
         goto fail_bind;
 
     if(listen(sockfd, LISTEN_QUEUE_SIZE) < 0)
         goto fail_listen;
 
-    //fcntl(sockfd, F_SETFL, O_NONBLOCK);
-
     pthread_cleanup_push(peer_listen_cleanup, (void*)&sockfd);
 
     while(true) {
-        printf("Listening for peers...\n");
+        log_printf(LOG_LEVEL_INFO, "Listening for incoming peer connections...\n");
 
         struct sockaddr peer;
         socklen_t len = sizeof(peer);
@@ -100,7 +100,7 @@ static void *peer_listen(void *arg)
         if(peer_sockfd < 0)
             break;
     
-        printf("connection accepted!\n");
+        log_printf(LOG_LEVEL_INFO, "Peer connection accepted\n");
         //here let a new thread handle the connection to the peer
     }
 
@@ -109,6 +109,10 @@ static void *peer_listen(void *arg)
 
 fail_listen:
 fail_bind:
+    if(errno){
+        strerror_r(errno, errbuff, sizeof(errbuff));
+        log_printf(LOG_LEVEL_ERROR, "%s", errbuff);
+    }
     pthread_exit(NULL);
 }
 
@@ -120,6 +124,7 @@ int peer_listener_create(pthread_t *thread, const uint16_t *port)
     return 0;
 
 fail_create_thread:
+    log_printf(LOG_LEVEL_ERROR, "Failed to create peer listener thread\n");
     return -1;    
 }
 

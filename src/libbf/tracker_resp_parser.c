@@ -1,5 +1,6 @@
 #include "tracker_resp_parser.h"
 #include "bencode.h"
+#include "log.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -45,14 +46,13 @@ fail_alloc:
 
 static list_t *parse_peerlist_list(list_t *list)
 {    
-    printf("WARNING: PARSING PEERS FROM LIST OF DICS - UNTESTED CODE\n");
+    log_printf(LOG_LEVEL_WARNING, "Parsing peers from list of dics -- untested\n");
     list_t *peers = list_init();
     if(!peers)
         goto fail_alloc;
 
     const unsigned char *entry;
     FOREACH_ENTRY(entry, list) {
-        printf("here\n");
 
         bencode_obj_t *peer_dict = *((bencode_obj_t**)entry);
         peer_t *peer = malloc(sizeof(peer_t));

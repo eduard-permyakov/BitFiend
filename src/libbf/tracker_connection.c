@@ -3,6 +3,7 @@
 #include "byte_str.h"
 #include "tracker_announce.h"
 #include "peer_id.h"
+#include "log.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -38,7 +39,7 @@ static tracker_announce_request_t *create_tracker_request(const void *arg)
 
 static void periodic_announce_cleanup(void *arg)
 {
-    printf("Sending one last \"stopped\" event to tracker\n");
+    log_printf(LOG_LEVEL_INFO, "Sending one last \"stopped\" event to tracker\n");
     const tracker_arg_t *targ = (tracker_arg_t*)arg;
 
     tracker_announce_request_t *req = create_tracker_request(arg);
@@ -73,8 +74,6 @@ static void *periodic_announce(void *arg)
     SET_HAS(req, REQUEST_HAS_EVENT);
     resp = tracker_announce(targ->torrent->announce, req);
 
-    printf("Received response for tracker announce started event\n");
-
     tracker_announce_request_free(req);
     if(resp)
         tracker_announce_resp_free(resp);
@@ -102,12 +101,10 @@ static void *periodic_announce(void *arg)
 
         //update the peer list of the torrent here
 
-        printf("About to sleep for %u seconds, but can be woken up\n", interval);
         /* Cancellation point */
         sleep(interval);
 
     }
-    printf("right here fam\n");
     
     pthread_cleanup_pop(0);
 }

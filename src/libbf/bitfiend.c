@@ -5,6 +5,7 @@
 #include "bencode.h"
 #include "torrent.h"
 #include "torrent_file.h"
+#include "log.h" 
 
 #include <pthread.h>
 #include <stdint.h>
@@ -20,7 +21,8 @@ static list_t           *s_torrents;
 
 int bitfiend_init(void)
 {
-    printf("bitfiend init\n");
+    log_set_lvl(LOG_LEVEL_DEBUG);    
+    log_set_logfile(stdout);
 
     peer_id_create(g_local_peer_id);
 
@@ -29,15 +31,16 @@ int bitfiend_init(void)
     if(peer_listener_create(&s_peer_listener, &s_port))
         goto fail_start_listener;
     
+    log_printf(LOG_LEVEL_INFO, "BitFiend init successful\n");
     return BITFIEND_SUCCESS;
 
 fail_start_listener:
+    log_printf(LOG_LEVEL_ERROR, "BitFiend init error\n");
     return BITFIEND_FAILURE;
 }
 
 static int shutdown_torrent(torrent_t *torrent)
 {
-    printf("shutdown torrent: %p\n", torrent);
     if(pthread_cancel(torrent->tracker_thread))
         goto fail_stop_tracker;
 
@@ -54,8 +57,6 @@ fail_stop_tracker:
 
 int bitfiend_shutdown(void)
 {
-    printf("bitfiend shutdown\n");
-
     int ret = BITFIEND_SUCCESS;
 
     if(pthread_cancel(s_peer_listener))
@@ -65,7 +66,6 @@ int bitfiend_shutdown(void)
     pthread_join(s_peer_listener, &tret);
     assert(tret == PTHREAD_CANCELED);
 
-    printf("torrents size: %u\n", list_get_size(s_torrents));
     pthread_mutex_lock(&s_torrents_lock);
     const unsigned char *entry;
     FOREACH_ENTRY(entry, s_torrents) {
@@ -74,17 +74,20 @@ int bitfiend_shutdown(void)
     list_free(s_torrents);
     pthread_mutex_unlock(&s_torrents_lock);
 
+    if(ret == BITFIEND_SUCCESS)
+        log_printf(LOG_LEVEL_INFO, "BitFiend shutdown successful\n");
+    else
+        log_printf(LOG_LEVEL_INFO, "BitFiend shutdown error\n");
+
     return ret;
 }
 
 torrent_t *bitfiend_add_torrent(const char *metafile)
 {
-    printf("bitfiend add torrent\n");
     bencode_obj_t *obj = torrent_file_parse(metafile);
     if(!obj)
         goto fail_parse;
 
-    printf("here\n");
     torrent_t *torrent = torrent_init(obj);
     extern void print_torrent(torrent_t *torrent);
     print_torrent(torrent);
@@ -103,11 +106,12 @@ torrent_t *bitfiend_add_torrent(const char *metafile)
     list_add(s_torrents, (unsigned char*)&torrent, sizeof(torrent_t*));
     pthread_mutex_unlock(&s_torrents_lock);
 
+    log_printf(LOG_LEVEL_INFO, "Torrent added successfully: %s\n", metafile);
     return torrent;
     
 fail_create:
-    printf("fail create\n");
 fail_parse:
+    log_printf(LOG_LEVEL_ERROR, "Error adding torrent: %s\n", metafile);
     return NULL;
 }
 

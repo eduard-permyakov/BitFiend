@@ -80,35 +80,6 @@ static int block_at_index(const char *msg, size_t len, int i, char out_block[64]
     }
 }
 
-static void print_block(unsigned char *block)
-{
-    const unsigned char *end = block + 64;
-    int xpos = 0;
-
-    for(; block < end; block++) {
-        printf("%02X", *block);
-        if(++xpos % 4 == 0)
-            printf(" ");
-    }
-    printf(" [x]\n");
-}
-
-void print_bits(size_t const size, void const * const ptr)
-{
-    unsigned char *b = (unsigned char*) ptr;
-    unsigned char byte;
-    int i, j;
-
-    for (i=0;i<size;i++)
-    {
-        for (j=7;j>=0;j--)
-        {
-            byte = (b[i] >> j) & 1;
-            printf("%u", byte);
-        }
-    }
-}
-
 int sha1_compute(const char *msg, size_t len, char out_digest[DIGEST_LEN])
 {
     const char *block = NULL;
@@ -160,13 +131,5 @@ int sha1_compute(const char *msg, size_t len, char out_digest[DIGEST_LEN])
     }
 
     memcpy(out_digest, digest.bytes, DIGEST_LEN);
-
-    //done
-    printf("FINAL SHA-1 HASH:\n");
-    for(int i = 0; i < DIGEST_LEN; i++) {
-        printf("%02X", digest.bytes[i]);
-        if(i % 4 == 3) printf(" ");
-    }
-    printf("\n");
-
+    return 0;
 }
