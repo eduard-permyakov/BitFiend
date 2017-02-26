@@ -99,7 +99,8 @@ torrent_t *torrent_init(bencode_obj_t *meta)
         }
 
         if(!strcmp(key, "encoding")) {
-            assert(0);
+            log_printf(LOG_LEVEL_WARNING, "Ignoring encoding key in metainfo file\n");
+            //assert(0);
             //TODO
         }
 

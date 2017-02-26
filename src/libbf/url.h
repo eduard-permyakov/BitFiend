@@ -7,6 +7,7 @@ typedef enum
 {
 	PROTOCOL_UNKNOWN = -1,
 	PROTOCOL_HTTP,
+    PROTOCOL_HTTPS,
 	PROTOCOL_UDP
 }protocol_t;
 

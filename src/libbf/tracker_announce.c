@@ -123,9 +123,9 @@ static int tracker_connect(url_t *url)
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
 
-    char port[5];
-    snprintf(port, sizeof(port), "%u", url->port);
-    port[sizeof(port)-1] = '\0';
+    char port[6];
+    int n = snprintf(port, sizeof(port), "%hu", url->port);
+    port[n] = '\0';
 
     int rv;
     if(rv = getaddrinfo(url->hostname, port, &hints, &head))
@@ -222,6 +222,7 @@ static int tracker_recv_resp(int sockfd, byte_str_t **outcont)
 
     log_printf(LOG_LEVEL_INFO, "Tracker HTTP response received\n");
 
+    printf("%.*s\n", (int)tot_recv, buff);
     *outcont = content_from_tracker_resp(buff, tot_recv);
     if(!*outcont)
         return -1;
@@ -241,6 +242,12 @@ tracker_announce_resp_t *tracker_announce(const char *urlstr, tracker_announce_r
     url_t *url = url_from_str(urlstr);
     if(!url)
         goto fail_parse_url;
+
+    if(url->protocol == PROTOCOL_HTTPS || url->protocol == PROTOCOL_UDP){
+        //TODO
+        log_printf(LOG_LEVEL_ERROR, "No support for HTTPS or UDP tracker protocols\n");
+        goto fail_parse_url;
+    }
 
     char *request_str = build_http_request(url, request);
     log_printf(LOG_LEVEL_DEBUG, "%s", request_str);
@@ -272,8 +279,8 @@ fail_send:
     close(sockfd);
 fail_connect:
     url_free(url);
-fail_parse_url:
     free(request_str);
+fail_parse_url:
 
     if(errno) {
         strerror_r(errno, errbuff, sizeof(errbuff));
