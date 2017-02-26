@@ -61,6 +61,7 @@ static void *periodic_announce(void *arg)
     unsigned interval;
     interval = 10; //temp - get this from resp
 
+    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
     pthread_cleanup_push(periodic_announce_cleanup, arg);
 
     pthread_mutex_lock(&targ->torrent->torrent_lock);
@@ -101,8 +102,10 @@ static void *periodic_announce(void *arg)
 
         //update the peer list of the torrent here
 
+        pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
         /* Cancellation point */
         sleep(interval);
+        pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
 
     }
     

@@ -77,6 +77,7 @@ static void *peer_listen(void *arg)
     int sockfd;
     char errbuff[64];
 
+    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
     if((sockfd = bind_listener(*(const uint16_t*)arg)) < 0)
         goto fail_bind;
 
@@ -91,11 +92,15 @@ static void *peer_listen(void *arg)
         struct sockaddr peer;
         socklen_t len = sizeof(peer);
         int peer_sockfd;
-        
+
+        pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
         /* Cancellation point */
         peer_sockfd = accept(sockfd, &peer, &len);
+        pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+
         if(errno == EAGAIN || errno == EWOULDBLOCK)   
             continue;
+
 
         if(peer_sockfd < 0)
             break;
