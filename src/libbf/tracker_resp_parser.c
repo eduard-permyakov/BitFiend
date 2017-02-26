@@ -46,7 +46,6 @@ fail_alloc:
 
 static list_t *parse_peerlist_list(list_t *list)
 {    
-    log_printf(LOG_LEVEL_WARNING, "Parsing peers from list of dics -- untested\n");
     list_t *peers = list_init();
     if(!peers)
         goto fail_alloc;
@@ -56,13 +55,14 @@ static list_t *parse_peerlist_list(list_t *list)
 
         bencode_obj_t *peer_dict = *((bencode_obj_t**)entry);
         peer_t *peer = malloc(sizeof(peer_t));
+        bool valid = true;
 
         const char *key;
         const unsigned char *val;
         FOREACH_KEY_AND_VAL(key, val, peer_dict->data.dictionary) {
 
-            if(!strcmp(key, "id")) {
-                memcpy(peer->peer_id, (*(bencode_obj_t**)val)->data.string->str, 20);
+            if(!strcmp(key, "peer id") || !strcmp(key, "id")) {
+                memcpy(peer->peer_id, (*(bencode_obj_t**)val)->data.string->str, sizeof(peer->peer_id));
             }
 
             if(!strcmp(key, "ip")) {
@@ -75,8 +75,12 @@ static list_t *parse_peerlist_list(list_t *list)
 
                 int ret = getaddrinfo(ipstr, NULL, &hint, &res);
                 if(!ret) {
+                    peer->sas.ss_family = res->ai_family;
                     memcpy(&peer->sas, res->ai_addr, sizeof(struct sockaddr));
                     freeaddrinfo(res);
+                }else{
+                    valid = false;
+                    break;
                 }
             }
 
@@ -91,7 +95,10 @@ static list_t *parse_peerlist_list(list_t *list)
             }
         }
 
-        list_add(peers, (unsigned char*)&peer, sizeof(peer_t*));
+        if(valid)
+            list_add(peers, (unsigned char*)&peer, sizeof(peer_t*));
+        else
+            free(peer);
 
     }
     return peers;
@@ -173,6 +180,7 @@ tracker_announce_resp_t *tracker_resp_parse(const byte_str_t *raw)
     return ret;
 
 fail_alloc:
+    bencode_free_obj_and_data_recursive(obj);
 fail_parse:
     return NULL;
 }

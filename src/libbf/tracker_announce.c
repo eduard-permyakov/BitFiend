@@ -222,7 +222,6 @@ static int tracker_recv_resp(int sockfd, byte_str_t **outcont)
 
     log_printf(LOG_LEVEL_INFO, "Tracker HTTP response received\n");
 
-    printf("%.*s\n", (int)tot_recv, buff);
     *outcont = content_from_tracker_resp(buff, tot_recv);
     if(!*outcont)
         return -1;
@@ -342,10 +341,10 @@ void print_tracker_response(tracker_announce_resp_t *resp)
         //assume ipv4
         if(peer->sas.ss_family == AF_INET) {
             inet_ntop(AF_INET, &peer->sa_in.sin_addr, buff, INET_ADDRSTRLEN); 
-            port = peer->sa_in.sin_port;
+            port = ntohs(peer->sa_in.sin_port);
         }else{
             inet_ntop(AF_INET6, &peer->sa_in6.sin6_addr, buff, INET6_ADDRSTRLEN);        
-            port = peer->sa_in6.sin6_port;
+            port = ntohs(peer->sa_in6.sin6_port);
         }
         printf("\t\tpeer: %s [port: %u]\n", buff, port); 
     }

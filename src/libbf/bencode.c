@@ -127,7 +127,8 @@ static bencode_obj_t *bencode_parse_dict(const char *benc, const char **endptr)
 
     ret = bencode_obj_create();
     ret->type = BENCODE_TYPE_DICT;
-    ret->data.dictionary = dict_init(16);
+    /* Dict of size 1 (bin)  will preserve the alphabetical ordering of the keys for iteration */
+    ret->data.dictionary = dict_init(1);
     assert(ret->data.dictionary);
 
     while(**endptr != 'e') {

@@ -3,7 +3,7 @@
 #include <signal.h>
 #include <stdbool.h>
 
-static bool running = true;
+static volatile bool running = true;
 
 static void sig_handler(int signum)
 {
