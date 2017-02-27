@@ -245,7 +245,7 @@ tracker_announce_resp_t *tracker_announce(const char *urlstr, tracker_announce_r
     if(url->protocol == PROTOCOL_HTTPS || url->protocol == PROTOCOL_UDP){
         //TODO
         log_printf(LOG_LEVEL_ERROR, "No support for HTTPS or UDP tracker protocols\n");
-        goto fail_parse_url;
+        goto fail_protocol;
     }
 
     char *request_str = build_http_request(url, request);
@@ -277,10 +277,10 @@ fail_recv:
 fail_send:
     close(sockfd);
 fail_connect:
-    url_free(url);
     free(request_str);
+fail_protocol:
+    url_free(url);
 fail_parse_url:
-
     if(errno) {
         strerror_r(errno, errbuff, sizeof(errbuff));
         log_printf(LOG_LEVEL_ERROR, "%s\n", errbuff);

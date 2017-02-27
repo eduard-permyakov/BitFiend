@@ -7,9 +7,6 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <stdio.h>
-#ifndef __USE_BSD
-    #define __USE_BSD
-#endif
 #include <endian.h>
 
 #define CIRCULAR_SHIFT_32(X, n) (htobe32((be32toh(X) << (n)) | (be32toh(X) >> (32-(n)))))

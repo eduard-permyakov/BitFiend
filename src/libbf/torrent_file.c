@@ -1,10 +1,6 @@
 #include "torrent_file.h"
-#include "sha1.h"
-#include "tracker_announce.h" //temp
-#include "peer_id.h" //temp
 
 #include <stdlib.h>
-#include <stdio.h> //temp
 #include <assert.h>
 #include <unistd.h>
 #include <string.h>
@@ -26,12 +22,12 @@ static torrent_file_t *torrent_file_open(const char *path)
     int fd;
     struct stat stats; 
 
-    fd = open(path, O_RDONLY);
+    fd = open(path, O_RDWR);
     if(fd < 0)
         goto fail_open;
     fstat(fd, &stats);
 
-    mem = mmap(NULL, stats.st_size, PROT_READ, MAP_PRIVATE, fd, 0); 
+    mem = mmap(NULL, stats.st_size, PROT_READ, MAP_SHARED, fd, 0); 
     if(!mem)
         goto fail_map;
     
