@@ -82,13 +82,13 @@ int bitfiend_shutdown(void)
     return ret;
 }
 
-torrent_t *bitfiend_add_torrent(const char *metafile)
+torrent_t *bitfiend_add_torrent(const char *metafile, const char *destdir)
 {
     bencode_obj_t *obj = torrent_file_parse(metafile);
     if(!obj)
         goto fail_parse;
 
-    torrent_t *torrent = torrent_init(obj);
+    torrent_t *torrent = torrent_init(obj, destdir);
     extern void print_torrent(torrent_t *torrent);
     print_torrent(torrent);
 

@@ -36,7 +36,7 @@ typedef struct torrent {
     pthread_t           tracker_thread;
 }torrent_t;
 
-torrent_t  *torrent_init(bencode_obj_t *meta);
+torrent_t  *torrent_init(bencode_obj_t *meta, const char *destdir);
 void        torrent_free(torrent_t *torrent);
 unsigned    torrent_left_to_download(torrent_t *torrent);
 

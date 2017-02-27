@@ -1,11 +1,16 @@
 #include "torrent.h"
 #include "byte_str.h"
 #include "log.h"
+#include "dl_file.h"
 
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h> //temp
+#include <errno.h>
+
+#include <sys/stat.h>
+#include <sys/types.h>
 
 static list_t *create_piece_list(byte_str_t *raw)
 {
@@ -33,23 +38,126 @@ fail_alloc_list:
     return NULL;
 }
 
-static void populate_from_info_dic(torrent_t *ret, dict_t *info)
+static int populate_files_from_list(torrent_t *torrent, list_t *files, 
+                                    const char *destdir, const char *name)
 {
+    const unsigned char *entry;
     const char *key;
     const unsigned char *val;
 
-    FOREACH_KEY_AND_VAL(key, val, info) {
-        if(!strcmp(key, "pieces")) {
-            ret->pieces = create_piece_list((*(bencode_obj_t**)val)->data.string);
+    assert(name);
+
+    char path[256];
+    strcpy(path, destdir);
+    strcat(path, "/");
+    strcat(path, name);
+    log_printf(LOG_LEVEL_INFO, "Creating directory: %s\n", path);
+    mkdir(path, 0777);
+
+    FOREACH_ENTRY(entry, files) {
+
+        dict_t *filedict = (*(bencode_obj_t**)entry)->data.dictionary;
+        unsigned len;
+
+        char path[256];
+        strcpy(path, destdir);
+        strcat(path, "/");
+        strcat(path, name);
+        strcat(path, "/");
+
+        FOREACH_KEY_AND_VAL(key, val, filedict) {
+            if(!strcmp(key, "length")) {
+                len = (*(bencode_obj_t**)val)->data.integer;
+            }
+
+            if(!strcmp(key, "path")) {
+                int i = 0;
+                list_t *pathlist = (*(bencode_obj_t**)val)->data.list;
+                const unsigned char *path_entry;
+            
+                FOREACH_ENTRY(path_entry, pathlist) {
+                    char *str = (char*)(*(bencode_obj_t**)path_entry)->data.string->str;
+                    strcat(path, str);
+
+                    if(i < list_get_size(pathlist) - 1) {
+                        mkdir(path, 0777);
+                        strcat(path, "/");
+                    }
+                    i++;
+                }
+            }
+
         }
 
-        if(!strcmp(key, "piece length")) {
-            ret->piece_len = (*(bencode_obj_t**)val)->data.integer;
-        }
+        dl_file_t *file = dl_file_create_and_open(len, path);
+        if(file)
+            list_add(torrent->files, (unsigned char*)&file, sizeof(dl_file_t*));
+        else
+            return -1;
     }
 }
 
-torrent_t *torrent_init(bencode_obj_t *meta)
+static int populate_from_info_dic(torrent_t *torrent, dict_t *info, const char *destdir)
+{
+    int ret = 0;
+    char errbuff[64];
+
+    const char *key;
+    const unsigned char *val;
+
+    bool multifile = false;
+    const char *name = NULL;
+    unsigned len;
+
+    FOREACH_KEY_AND_VAL(key, val, info) {
+        if(!strcmp(key, "name")) {
+            name = (char*)(*(bencode_obj_t**)val)->data.string->str;
+        }
+    }
+
+    FOREACH_KEY_AND_VAL(key, val, info) {
+        if(!strcmp(key, "pieces")) {
+            torrent->pieces = create_piece_list((*(bencode_obj_t**)val)->data.string);
+        }
+
+        if(!strcmp(key, "piece length")) {
+            torrent->piece_len = (*(bencode_obj_t**)val)->data.integer;
+        }
+
+        if(!strcmp(key, "length")) {
+            len = (*(bencode_obj_t**)val)->data.integer;
+        }
+
+        if(!strcmp(key, "files")) {
+            multifile = true;
+
+            list_t *files = (*(bencode_obj_t**)val)->data.list;
+            if(populate_files_from_list(torrent, files, destdir, name))
+                ret = -1;
+        }
+    }
+
+    if(!multifile) {
+        char path[256]; 
+        strcpy(path, destdir);
+        strcat(path, "/");
+        strcat(path, name);
+
+        dl_file_t *file = dl_file_create_and_open(len, path);
+        if(file)
+            list_add(torrent->files, (unsigned char*)&file, sizeof(dl_file_t*));
+        else
+            ret = -1;
+    }
+
+    if(ret && errno) {
+        strerror_r(errno, errbuff, sizeof(errbuff));
+        log_printf(LOG_LEVEL_ERROR, "%s\n", errbuff);
+    }
+    return ret;
+}
+
+torrent_t *torrent_init(bencode_obj_t *meta, const char *destdir)
 {
     torrent_t *ret = malloc(sizeof(torrent_t));
     if(!ret)
@@ -65,7 +173,8 @@ torrent_t *torrent_init(bencode_obj_t *meta)
             bencode_obj_t *info_dic = *((bencode_obj_t**)val);
             memcpy(ret->info_hash, info_dic->sha1, DIGEST_LEN);
 
-            populate_from_info_dic(ret, info_dic->data.dictionary);
+            ret->files = list_init();
+            populate_from_info_dic(ret, info_dic->data.dictionary, destdir);
         }
 
         if(!strcmp(key, "announce")) {
@@ -108,7 +217,6 @@ torrent_t *torrent_init(bencode_obj_t *meta)
 
     pthread_mutex_init(&ret->torrent_lock, NULL); 
     //TODO: populate files list with data from info dic
-    ret->files = list_init();
     ret->peer_connections = list_init();
     ret->priority = DEFAULT_PRIORITY;
     ret->state = TORRENT_STATE_LEECHING;
@@ -137,7 +245,7 @@ void torrent_free(torrent_t *torrent)
     list_free(torrent->pieces);
 
     FOREACH_ENTRY(entry, torrent->files){
-        //TODO
+        dl_file_close_and_free(*(dl_file_t**)entry); 
     }
     list_free(torrent->files);
 

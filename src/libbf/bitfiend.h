@@ -12,7 +12,7 @@ enum{
 int         bitfiend_init(void);
 int         bitfiend_shutdown(void);
 
-torrent_t   *bitfiend_add_torrent(const char *metafile);
+torrent_t   *bitfiend_add_torrent(const char *metafile, const char *destdir);
 int         bitfiend_start_torrent(torrent_t *torrent);
 int         bitfiend_pause_torrent(torrent_t *torrent);
 int         bitfiend_set_priority(torrent_t *torrent);
