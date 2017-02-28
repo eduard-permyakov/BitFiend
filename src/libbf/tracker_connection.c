@@ -4,6 +4,7 @@
 #include "tracker_announce.h"
 #include "peer_id.h"
 #include "log.h"
+#include "peer_connection.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -37,6 +38,39 @@ static tracker_announce_request_t *create_tracker_request(const void *arg)
     return ret;
 }
 
+static int create_peer_connection(peer_t *peer, torrent_t *torrent)
+{
+    peer_conn_t *conn = malloc(sizeof(peer_conn_t));            
+    if(!conn)
+        return -1;
+    conn->peer = *peer;
+
+    peer_arg_t *arg = malloc(sizeof(peer_arg_t));    
+    if(!arg) {
+        free(conn);
+        return -1;
+    }
+    arg->torrent = torrent;
+    arg->has_torrent = true;
+    arg->has_sockfd = false;
+    arg->peer = *peer;
+
+    if(peer_connection_create(&conn->thread, arg))
+        goto fail_create;
+    
+    pthread_mutex_lock(&torrent->torrent_lock);
+    list_add(torrent->peer_connections, (unsigned char*)&conn, sizeof(peer_conn_t*));  
+    pthread_mutex_unlock(&torrent->torrent_lock);
+
+    return 0;
+
+fail_create:
+    log_printf(LOG_LEVEL_ERROR, "Failed to create peer thread\n");
+    free(arg);
+    free(conn);
+    return -1;
+}
+
 static void periodic_announce_cleanup(void *arg)
 {
     log_printf(LOG_LEVEL_INFO, "Sending one last \"stopped\" event to tracker\n");
@@ -59,7 +93,6 @@ static void *periodic_announce(void *arg)
     const tracker_arg_t *targ = (tracker_arg_t*)arg;
     bool completed;
     unsigned interval;
-    interval = 10; //temp - get this from resp
 
     pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
     pthread_cleanup_push(periodic_announce_cleanup, arg);
@@ -92,9 +125,19 @@ static void *periodic_announce(void *arg)
 
         resp = tracker_announce(targ->torrent->announce, req);
 
-        extern void print_tracker_response(tracker_announce_resp_t *resp);
-        if(resp)
+        if(resp) {
+            //temp
+            extern void print_tracker_response(tracker_announce_resp_t *resp);
             print_tracker_response(resp);
+            interval = resp->interval;
+
+            const unsigned char *entry;
+            FOREACH_ENTRY(entry, resp->peers) {
+                create_peer_connection(*(peer_t**)entry, targ->torrent);
+            }
+        }else{
+            interval = 15;
+        }
 
         tracker_announce_request_free(req);
         if(resp)

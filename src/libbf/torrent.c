@@ -2,6 +2,7 @@
 #include "byte_str.h"
 #include "log.h"
 #include "dl_file.h"
+#include "peer_connection.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -216,7 +217,6 @@ torrent_t *torrent_init(bencode_obj_t *meta, const char *destdir)
     }
 
     pthread_mutex_init(&ret->torrent_lock, NULL); 
-    //TODO: populate files list with data from info dic
     ret->peer_connections = list_init();
     ret->priority = DEFAULT_PRIORITY;
     ret->state = TORRENT_STATE_LEECHING;
@@ -250,7 +250,7 @@ void torrent_free(torrent_t *torrent)
     list_free(torrent->files);
 
     FOREACH_ENTRY(entry, torrent->peer_connections) {
-        //TODO
+        free(*(peer_conn_t**)entry);
     }
     list_free(torrent->peer_connections);
 

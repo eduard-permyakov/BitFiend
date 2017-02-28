@@ -6,6 +6,7 @@
 #include "torrent.h"
 #include "torrent_file.h"
 #include "log.h" 
+#include "peer_connection.h"
 
 #include <pthread.h>
 #include <stdint.h>
@@ -44,9 +45,18 @@ static int shutdown_torrent(torrent_t *torrent)
     if(pthread_cancel(torrent->tracker_thread))
         goto fail_stop_tracker;
 
+    const unsigned char *entry;
+    printf("peer connections size: %u\n", list_get_size(torrent->peer_connections));
+
     void *ret;
     pthread_join(torrent->tracker_thread, &ret);
     assert(ret == PTHREAD_CANCELED);
+
+    FOREACH_ENTRY(entry, torrent->peer_connections) {
+        peer_conn_t *conn = *(peer_conn_t**)entry;
+        void *ret;
+        pthread_join(conn->thread, &ret); 
+    }
 
     torrent_free(torrent);
     return BITFIEND_SUCCESS;
