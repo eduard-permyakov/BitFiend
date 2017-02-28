@@ -3,8 +3,8 @@
 
 #include "list.h"
 #include "byte_str.h"
+#include "peer.h"
 #include <stddef.h>
-#include <netinet/ip.h>
 
 typedef enum {
     TORRENT_EVENT_STARTED,
@@ -61,15 +61,6 @@ typedef struct tracker_announce_resp {
     char *warning_message;
     int64_t min_interval;
 }tracker_announce_resp_t;
-
-typedef struct peer{
-    char peer_id[20];
-    union {
-        struct sockaddr_storage sas;
-        struct sockaddr_in sa_in;
-        struct sockaddr_in6 sa_in6;
-    };
-}peer_t;
 
 tracker_announce_resp_t *tracker_announce(const char *urlstr, tracker_announce_request_t *request);
 void tracker_announce_request_free(tracker_announce_request_t *req);

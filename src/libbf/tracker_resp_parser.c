@@ -28,10 +28,10 @@ static list_t *parse_peerlist_str(byte_str_t *raw)
 
         peer_t *peer = malloc(sizeof(peer_t));
         struct sockaddr_in ipv4;
-        peer->sas.ss_family = AF_INET;
-        peer->sa_in.sin_addr.s_addr = ip;
-        peer->sa_in.sin_port = port;
-        memset(peer->sa_in.sin_zero, 0, sizeof(peer->sa_in.sin_zero));
+        peer->addr.sas.ss_family = AF_INET;
+        peer->addr.sa_in.sin_addr.s_addr = ip;
+        peer->addr.sa_in.sin_port = port;
+        memset(peer->addr.sa_in.sin_zero, 0, sizeof(peer->addr.sa_in.sin_zero));
 
         memset(peer->peer_id, 0, sizeof(peer->peer_id));
 
@@ -75,8 +75,8 @@ static list_t *parse_peerlist_list(list_t *list)
 
                 int ret = getaddrinfo(ipstr, NULL, &hint, &res);
                 if(!ret) {
-                    peer->sas.ss_family = res->ai_family;
-                    memcpy(&peer->sas, res->ai_addr, sizeof(struct sockaddr));
+                    peer->addr.sas.ss_family = res->ai_family;
+                    memcpy(&peer->addr.sas, res->ai_addr, sizeof(struct sockaddr));
                     freeaddrinfo(res);
                 }else{
                     valid = false;
@@ -87,10 +87,10 @@ static list_t *parse_peerlist_list(list_t *list)
             if(!strcmp(key, "port")) {
                 uint16_t port = (uint16_t)(*(bencode_obj_t**)val)->data.integer;
 
-                if(peer->sas.ss_family = AF_INET) {
-                    peer->sa_in.sin_port = htons(port);
+                if(peer->addr.sas.ss_family = AF_INET) {
+                    peer->addr.sa_in.sin_port = htons(port);
                 }else{
-                    peer->sa_in6.sin6_port = htons(port);
+                    peer->addr.sa_in6.sin6_port = htons(port);
                 }
             }
         }

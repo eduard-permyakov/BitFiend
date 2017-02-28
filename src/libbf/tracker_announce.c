@@ -339,12 +339,12 @@ void print_tracker_response(tracker_announce_resp_t *resp)
         char buff[INET6_ADDRSTRLEN];
         uint16_t port;
         //assume ipv4
-        if(peer->sas.ss_family == AF_INET) {
-            inet_ntop(AF_INET, &peer->sa_in.sin_addr, buff, INET_ADDRSTRLEN); 
-            port = ntohs(peer->sa_in.sin_port);
+        if(peer->addr.sas.ss_family == AF_INET) {
+            inet_ntop(AF_INET, &peer->addr.sa_in.sin_addr, buff, INET_ADDRSTRLEN); 
+            port = ntohs(peer->addr.sa_in.sin_port);
         }else{
-            inet_ntop(AF_INET6, &peer->sa_in6.sin6_addr, buff, INET6_ADDRSTRLEN);        
-            port = ntohs(peer->sa_in6.sin6_port);
+            inet_ntop(AF_INET6, &peer->addr.sa_in6.sin6_addr, buff, INET6_ADDRSTRLEN);        
+            port = ntohs(peer->addr.sa_in6.sin6_port);
         }
         printf("\t\tpeer: %s [port: %u]\n", buff, port); 
     }

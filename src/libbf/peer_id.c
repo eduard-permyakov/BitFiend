@@ -8,7 +8,7 @@
 
 char                        g_local_peer_id[20];
 
-static const char          *s_cli_id = "bf";
+static const char          *s_cli_id = "gg"; //temp spoof for develpment
 static const unsigned int   s_major_ver = 0;
 static const unsigned int   s_minor_ver = 0;
 
