@@ -216,16 +216,16 @@ torrent_t *torrent_init(bencode_obj_t *meta, const char *destdir)
 
     }
 
-    pthread_mutex_init(&ret->torrent_lock, NULL); 
-    ret->peer_connections = list_init();
-    ret->priority = DEFAULT_PRIORITY;
-    ret->state = TORRENT_STATE_LEECHING;
-    ret->progress = 0.0f;
-    ret->upspeed = 0.0f;
-    ret->downspeed = 0.0f;
-    ret->uploaded = 0;  
-    ret->downloaded = 0;
-    ret->completed = false;
+    pthread_mutex_init(&ret->sh_lock, NULL); 
+    ret->sh.peer_connections = list_init();
+    ret->sh.priority = DEFAULT_PRIORITY;
+    ret->sh.state = TORRENT_STATE_LEECHING;
+    ret->sh.progress = 0.0f;
+    ret->sh.upspeed = 0.0f;
+    ret->sh.downspeed = 0.0f;
+    ret->sh.uploaded = 0;  
+    ret->sh.downloaded = 0;
+    ret->sh.completed = false;
     
     return ret;
 
@@ -237,7 +237,7 @@ void torrent_free(torrent_t *torrent)
 {
     const unsigned char *entry;
 
-    pthread_mutex_destroy(&torrent->torrent_lock);
+    pthread_mutex_destroy(&torrent->sh_lock);
 
     FOREACH_ENTRY(entry, torrent->pieces){
         byte_str_free(*(byte_str_t**)entry);
@@ -249,10 +249,10 @@ void torrent_free(torrent_t *torrent)
     }
     list_free(torrent->files);
 
-    FOREACH_ENTRY(entry, torrent->peer_connections) {
+    FOREACH_ENTRY(entry, torrent->sh.peer_connections) {
         free(*(peer_conn_t**)entry);
     }
-    list_free(torrent->peer_connections);
+    list_free(torrent->sh.peer_connections);
 
     if(torrent->announce) 
         free(torrent->announce);
@@ -278,14 +278,14 @@ void print_torrent(torrent_t *torrent)
     printf("\tpieces: %p, size: %u\n", torrent->pieces, list_get_size(torrent->pieces));
     printf("\tpiece len: %u\n", torrent->piece_len);
     printf("\tfiles: %p, size: %u\n", torrent->files, list_get_size(torrent->files));
-    printf("\tpeer connections: %p, size: %u\n", torrent->peer_connections, 
-        list_get_size(torrent->peer_connections));
-    printf("\tpriority: %u\n", torrent->priority);
-    printf("\tstate: %d\n", torrent->state);
-    printf("\tprogress: %f\n", torrent->progress);
-    printf("\tupspeed: %f\n", torrent->upspeed);
-    printf("\tdownspeed: %f\n", torrent->downspeed);
-    printf("\tcompleted: %hhd\n", torrent->completed); 
+    printf("\tpeer connections: %p, size: %u\n", torrent->sh.peer_connections, 
+        list_get_size(torrent->sh.peer_connections));
+    printf("\tpriority: %u\n", torrent->sh.priority);
+    printf("\tstate: %d\n", torrent->sh.state);
+    printf("\tprogress: %f\n", torrent->sh.progress);
+    printf("\tupspeed: %f\n", torrent->sh.upspeed);
+    printf("\tdownspeed: %f\n", torrent->sh.downspeed);
+    printf("\tcompleted: %hhd\n", torrent->sh.completed); 
     printf("\tinfo hash: ");
     for(int i = 0; i < 20; i++) {
         printf("%02X", (unsigned char)torrent->info_hash[i]); 

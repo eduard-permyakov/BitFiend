@@ -47,16 +47,21 @@ static int shutdown_torrent(torrent_t *torrent)
         goto fail_stop_tracker;
 
     const unsigned char *entry;
-    printf("peer connections size: %u\n", list_get_size(torrent->peer_connections));
-
     void *ret;
     pthread_join(torrent->tracker_thread, &ret);
     assert(ret == PTHREAD_CANCELED);
 
-    FOREACH_ENTRY(entry, torrent->peer_connections) {
-        peer_conn_t *conn = *(peer_conn_t**)entry;
+    /* First elem of peer_connections cannot be changed by other threads at this point */
+    const list_iter_t *iter = list_iter_first(torrent->sh.peer_connections);
+    while(iter){
+
+        peer_conn_t *conn = *(peer_conn_t**)(list_iter_get_value(iter));
         void *ret;
         pthread_join(conn->thread, &ret); 
+
+        pthread_mutex_lock(&torrent->sh_lock);
+        iter = list_iter_next(iter);
+        pthread_mutex_unlock(&torrent->sh_lock);
     }
 
     torrent_free(torrent);
@@ -156,13 +161,15 @@ torrent_t *bitfiend_assoc_peer(peer_conn_t *peer, char infohash[20])
         torrent_t *torrent = *(torrent_t**)entry;
 
         if(!memcmp(torrent->info_hash, infohash, sizeof(torrent->info_hash))) {
-            pthread_mutex_lock(&torrent->torrent_lock);
+
+            pthread_mutex_lock(&torrent->sh_lock);
 
             log_printf(LOG_LEVEL_INFO, "Associated incoming peer connection with torrent\n");
-            list_add(torrent->peer_connections, (unsigned char*)&peer, sizeof(peer_t*));
+            list_add(torrent->sh.peer_connections, (unsigned char*)&peer, sizeof(peer_t*));
             ret = torrent;
 
-            pthread_mutex_unlock(&torrent->torrent_lock);
+            pthread_mutex_unlock(&torrent->sh_lock);
+
             break;
         }
     
