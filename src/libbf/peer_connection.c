@@ -87,7 +87,7 @@ static int recv_handshake(int sockfd, char outhash[20], char outpeerid[20], bool
     unsigned char pstrlen = strlen(pstr);
     const char reserved[8] = {0};  
 
-    size_t bufflen = 1 + pstrlen + sizeof(reserved) + sizeof(char[20])
+    size_t bufflen = 1 + pstrlen + sizeof(reserved) + 20
        + (peer_id ? sizeof(g_local_peer_id) : 0);
 
     char buff[bufflen];
@@ -105,24 +105,22 @@ static int recv_handshake(int sockfd, char outhash[20], char outpeerid[20], bool
     /*Skip checking the reserved bits for now*/
     off += 8; 
 
-    memcpy(outhash, buff + off, sizeof(char[20]));            
+    memcpy(outhash, buff + off, 20);            
     if(peer_id) {
-        off += sizeof(char[20]);
+        off += 20;
         memcpy(outpeerid, buff + off, sizeof(g_local_peer_id));
     }
 
     return 0;
 }
 
-static int send_handshake(int sockfd, torrent_t *torrent)
+static int send_handshake(int sockfd, char infohash[20])
 {
     const char *pstr = "BitTorrent protocol"; 
     unsigned char pstrlen = strlen(pstr);
     const char reserved[8] = {0};  
 
-    size_t bufflen = 1 + pstrlen + sizeof(reserved) + sizeof(torrent->info_hash)
-        + sizeof(g_local_peer_id);
-    assert(bufflen == 68);
+    size_t bufflen = 1 + pstrlen + sizeof(reserved) + 20 + sizeof(g_local_peer_id);
 
     off_t off = 0;
     char buff[bufflen];
@@ -137,11 +135,10 @@ static int send_handshake(int sockfd, torrent_t *torrent)
     memcpy(buff + off, reserved, sizeof(reserved));
     off += sizeof(reserved);
     assert(off == 28);
-    assert(sizeof(torrent->info_hash) == 20);
 
-    memcpy(buff + off, torrent->info_hash, sizeof(torrent->info_hash));
-    off += sizeof(torrent->info_hash);
+    memcpy(buff + off, infohash, 20);
 
+    off += 20;
     memcpy(buff + off, g_local_peer_id, sizeof(g_local_peer_id));
     
     return send_buff(sockfd, buff, bufflen);
@@ -230,12 +227,10 @@ static void *peer_connection(void *arg)
     state.remote.choked = true;
     state.remote.interested = false;
 
-    //when has torrent - send first, then recv
-    //when no torrent, recv first, then send
     if(parg->has_torrent) {
         torrent = parg->torrent;
 
-        if(send_handshake(sockfd, torrent))
+        if(send_handshake(sockfd, torrent->info_hash))
             goto fail_handshake;
 
         if(recv_handshake(sockfd, info_hash, peer_id, true))
@@ -251,16 +246,24 @@ static void *peer_connection(void *arg)
             goto fail_handshake;
         conn->thread = pthread_self();
         conn->peer = parg->peer;
+        /* peer_id not set on conn */
         torrent = bitfiend_assoc_peer(conn, info_hash);
         if(!torrent){
             free(conn);
             goto fail_handshake;
         }
 
-        if(send_handshake(sockfd, torrent))
+        if(send_handshake(sockfd, torrent->info_hash))
             goto fail_handshake;
+
+        if(recv_buff(sockfd, peer_id, sizeof(peer_id))){
+            /* Did not receive last 20 bytes, the peer id*/
+            /* This was likely the tracker probing us, drop the connection*/
+            goto fail_handshake;
+        }
+
     }
-    log_printf(LOG_LEVEL_INFO, "Handshake with peer %s successful\n", ipstr);
+    log_printf(LOG_LEVEL_INFO, "Handshake with peer %s (ID: %.*s) successful\n", ipstr, 20, peer_id);
 
     close(sockfd);
     log_printf(LOG_LEVEL_INFO, "Closed peer (%s) socket connection: %d\n", ipstr, sockfd);

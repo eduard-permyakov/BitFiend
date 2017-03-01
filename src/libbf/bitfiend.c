@@ -51,8 +51,10 @@ static int shutdown_torrent(torrent_t *torrent)
     pthread_join(torrent->tracker_thread, &ret);
     assert(ret == PTHREAD_CANCELED);
 
-    /* First elem of peer_connections cannot be changed by other threads at this point */
+    pthread_mutex_lock(&torrent->sh_lock);
     const list_iter_t *iter = list_iter_first(torrent->sh.peer_connections);
+    pthread_mutex_unlock(&torrent->sh_lock);
+
     while(iter){
 
         peer_conn_t *conn = *(peer_conn_t**)(list_iter_get_value(iter));
