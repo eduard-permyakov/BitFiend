@@ -13,7 +13,7 @@ static void sig_handler(int signum)
 int main(int argc, char **argv)
 {
     bitfiend_init();
-    bitfiend_add_torrent("/home/eduard/Downloads/ubuntu.torrent", "/home/eduard/Desktop");
+    bitfiend_add_torrent("/home/eduard/Downloads/ubuntu-16.04.2-desktop-amd64.iso.torrent", "/home/eduard/Desktop");
 
     signal(SIGINT, sig_handler);
     while(running)

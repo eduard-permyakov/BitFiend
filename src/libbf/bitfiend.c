@@ -8,6 +8,7 @@
 #include "log.h" 
 #include "peer_connection.h"
 
+#include <string.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <unistd.h>
@@ -143,5 +144,31 @@ int bitfiend_set_priority(torrent_t *torrent)
 int bitfiend_remove_torrent(torrent_t *torrent)
 {
 
+}
+
+torrent_t *bitfiend_assoc_peer(peer_conn_t *peer, char infohash[20])
+{
+    const unsigned char *entry;
+    torrent_t *ret = NULL;
+
+    pthread_mutex_lock(&s_torrents_lock);
+    FOREACH_ENTRY(entry, s_torrents) {
+        torrent_t *torrent = *(torrent_t**)entry;
+
+        if(!memcmp(torrent->info_hash, infohash, sizeof(torrent->info_hash))) {
+            pthread_mutex_lock(&torrent->torrent_lock);
+
+            log_printf(LOG_LEVEL_INFO, "Associated incoming peer connection with torrent\n");
+            list_add(torrent->peer_connections, (unsigned char*)&peer, sizeof(peer_t*));
+            ret = torrent;
+
+            pthread_mutex_unlock(&torrent->torrent_lock);
+            break;
+        }
+    
+    }
+    pthread_mutex_unlock(&s_torrents_lock);
+
+    return ret;
 }
 

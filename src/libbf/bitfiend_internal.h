@@ -3,6 +3,6 @@
 
 #include "torrent.h"
 
-torrent_t *bitfiend_assoc_peer(peer_conn_t *peer);
+torrent_t *bitfiend_assoc_peer(peer_conn_t *peer, char infohash[20]);
 
 #endif

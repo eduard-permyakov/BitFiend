@@ -13,7 +13,7 @@ LIBBF_DEPS=$(LIBBF_OBJS:%.o=%.d)
 
 bitfiend: $(LIBBF_OBJS)
 	@mkdir -p ./bin
-	$(CC) $(CFLAGS) $(DEFS) $(LIBBF_OBJS) -o $(BIN)
+	$(CC) $(CFLAGS) $(LIBBF_OBJS) -o $(BIN)
 
 -include $(LIBBF_DEPS)
 

@@ -118,7 +118,7 @@ static void *periodic_announce(void *arg)
         pthread_mutex_lock(&targ->torrent->torrent_lock);
         if(completed == false && targ->torrent->completed == true) {
             req->event = TORRENT_EVENT_COMPLETED;
-            SET_HAS(req, TORRENT_EVENT_COMPLETED);
+            SET_HAS(req, REQUEST_HAS_EVENT);
         }
         completed = targ->torrent->completed;
         pthread_mutex_unlock(&targ->torrent->torrent_lock);
@@ -142,8 +142,6 @@ static void *periodic_announce(void *arg)
         tracker_announce_request_free(req);
         if(resp)
             tracker_announce_resp_free(resp);
-
-        //update the peer list of the torrent here
 
         pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
         /* Cancellation point */

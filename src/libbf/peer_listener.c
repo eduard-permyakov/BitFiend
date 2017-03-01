@@ -1,5 +1,7 @@
 #include "peer_listener.h"
 #include "log.h"
+#include "peer.h"
+#include "peer_connection.h"
 
 #include <stdbool.h>
 #include <string.h>
@@ -72,6 +74,35 @@ static void peer_listen_cleanup(void *arg)
     close(sockfd);
 }
 
+static int create_peer_connection(peer_t *peer, int sockfd)
+{
+    peer_conn_t *conn = malloc(sizeof(peer_conn_t));            
+    if(!conn)
+        return -1;
+    conn->peer = *peer;
+
+    peer_arg_t *arg = malloc(sizeof(peer_arg_t));    
+    if(!arg) {
+        free(conn);
+        return -1;
+    }
+    arg->has_torrent = false;
+    arg->has_sockfd = true;
+    arg->sockfd = sockfd;
+    arg->peer = *peer;
+
+    if(peer_connection_create(&conn->thread, arg))
+        goto fail_create;
+    
+    return 0;
+
+fail_create:
+    log_printf(LOG_LEVEL_ERROR, "Failed to create peer thread\n");
+    free(arg);
+    free(conn);
+    return -1;
+}
+
 static void *peer_listen(void *arg)
 {
     int sockfd;
@@ -89,28 +120,30 @@ static void *peer_listen(void *arg)
     while(true) {
         log_printf(LOG_LEVEL_INFO, "Listening for incoming peer connections...\n");
 
-        struct sockaddr peer;
-        socklen_t len = sizeof(peer);
+        struct sockaddr peersock;
+        socklen_t len = sizeof(peersock);
         int peer_sockfd;
 
         pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
         /* Cancellation point */
-        peer_sockfd = accept(sockfd, &peer, &len);
+        peer_sockfd = accept(sockfd, &peersock, &len);
         pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
 
-        if(errno == EAGAIN || errno == EWOULDBLOCK)   
+        if(peer_sockfd < 0){
+            printf("ERROR PEER SOCKFD!\n");
             continue;
-
-
-        if(peer_sockfd < 0)
-            break;
+        }
     
-        log_printf(LOG_LEVEL_INFO, "Peer connection accepted\n");
-        //here let a new thread handle the connection to the peer
+        log_printf(LOG_LEVEL_INFO, "Peer connection accepted (sockfd: %d)\n", peer_sockfd);
+
+        peer_t *peer = malloc(sizeof(peer_t));        
+        memset(peer->peer_id, 0, sizeof(peer->peer_id));
+        peer->addr.sa = peersock;
+
+        create_peer_connection(peer, peer_sockfd);
     }
 
     pthread_cleanup_pop(0);
-    pthread_exit(NULL);
 
 fail_listen:
 fail_bind:

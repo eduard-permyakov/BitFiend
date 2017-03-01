@@ -57,7 +57,6 @@ static char *build_http_request(url_t *url, tracker_announce_request_t *request)
     written += snprintf(buff + written, sizeof(buff) - written, "&port=%hu", request->port);
     written += snprintf(buff + written, sizeof(buff) - written, "&uploaded=%lu", request->uploaded);
     written += snprintf(buff + written, sizeof(buff) - written, "&downloaded=%lu", request->downloaded);
-    written += snprintf(buff + written, sizeof(buff) - written, "&downloaded=%lu", request->downloaded);
     written += snprintf(buff + written, sizeof(buff) - written, "&left=%lu", request->left);
 
     if(HAS(request, REQUEST_HAS_COMPACT)) {
@@ -338,7 +337,7 @@ void print_tracker_response(tracker_announce_resp_t *resp)
 
         char buff[INET6_ADDRSTRLEN];
         uint16_t port;
-        //assume ipv4
+
         if(peer->addr.sas.ss_family == AF_INET) {
             inet_ntop(AF_INET, &peer->addr.sa_in.sin_addr, buff, INET_ADDRSTRLEN); 
             port = ntohs(peer->addr.sa_in.sin_port);
