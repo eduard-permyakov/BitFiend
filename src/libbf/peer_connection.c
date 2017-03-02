@@ -1,7 +1,7 @@
 #include "peer_connection.h"
 #include "log.h"
-#include "peer_id.h"
 #include "bitfiend_internal.h"
+#include "peer_msg.h"
 
 #include <string.h>
 #include <stdbool.h>
@@ -20,22 +20,10 @@ typedef struct peer_state {
     bool interested;
 }peer_state_t;
 
-typedef struct{
+typedef struct {
     peer_state_t local;
     peer_state_t remote;
 }conn_state_t;
-
-typedef enum{
-    MSG_CHOKE           = 0,
-    MSG_UNCHOKE         = 1,
-    MSG_INTERESTED      = 2,
-    MSG_NOT_INTERESTED  = 3,
-    MSG_HAVE            = 4,
-    MSG_BITFIELD        = 5,
-    MSG_REQUEST         = 6,
-    MSG_PIECE           = 7,
-    MSG_CANCEL          = 8  
-}msg_type_t;
 
 static void print_ip(peer_t *peer, char *outbuff, size_t n)
 {
@@ -44,104 +32,6 @@ static void print_ip(peer_t *peer, char *outbuff, size_t n)
     }else{
         inet_ntop(AF_INET6, &peer->addr.sa_in6.sin6_addr, outbuff, n);        
     }
-}
-
-static int send_buff(int sockfd, const char *buff, size_t len)
-{
-    ssize_t tot_sent = 0;
-    while(tot_sent < len) {
-        ssize_t sent = send(sockfd, buff, len - tot_sent, 0);
-        if(sent < 0)
-            return -1;
-
-        tot_sent += sent;
-        buff += sent;
-    }
-    return 0;
-}
-
-static int recv_buff(int sockfd, char *buff, size_t len)
-{
-    unsigned tot_recv = 0;
-    ssize_t nb;
-
-    do {
-        nb = recv(sockfd, buff + tot_recv, len - tot_recv, 0);
-        if(nb < 0){
-            return -1;
-        }
-
-        tot_recv += nb;
-
-    }while(nb > 0 && tot_recv < len);
-
-    if(tot_recv == len)
-        return 0;
-    else
-        return -1;
-}
-
-static int recv_handshake(int sockfd, char outhash[20], char outpeerid[20], bool peer_id)
-{
-    const char *pstr = "BitTorrent protocol"; 
-    unsigned char pstrlen = strlen(pstr);
-    const char reserved[8] = {0};  
-
-    size_t bufflen = 1 + pstrlen + sizeof(reserved) + 20
-       + (peer_id ? sizeof(g_local_peer_id) : 0);
-
-    char buff[bufflen];
-    if(recv_buff(sockfd, buff, bufflen))
-        return -1;
-
-    off_t off = 0;
-    if(buff[off] != pstrlen)
-        return -1;
-    off++;
-    if(strncmp(buff + off, pstr, pstrlen))
-        return -1;
-    off += pstrlen;
-
-    /*Skip checking the reserved bits for now*/
-    off += 8; 
-
-    memcpy(outhash, buff + off, 20);            
-    if(peer_id) {
-        off += 20;
-        memcpy(outpeerid, buff + off, sizeof(g_local_peer_id));
-    }
-
-    return 0;
-}
-
-static int send_handshake(int sockfd, char infohash[20])
-{
-    const char *pstr = "BitTorrent protocol"; 
-    unsigned char pstrlen = strlen(pstr);
-    const char reserved[8] = {0};  
-
-    size_t bufflen = 1 + pstrlen + sizeof(reserved) + 20 + sizeof(g_local_peer_id);
-
-    off_t off = 0;
-    char buff[bufflen];
-
-    buff[0] = pstrlen;
-    off++;
-
-    memcpy(buff + off, pstr, pstrlen);
-    off += pstrlen;
-    assert(off == 20);
-
-    memcpy(buff + off, reserved, sizeof(reserved));
-    off += sizeof(reserved);
-    assert(off == 28);
-
-    memcpy(buff + off, infohash, 20);
-
-    off += 20;
-    memcpy(buff + off, g_local_peer_id, sizeof(g_local_peer_id));
-    
-    return send_buff(sockfd, buff, bufflen);
 }
 
 static int peer_connect(peer_arg_t *arg)
@@ -230,15 +120,15 @@ static void *peer_connection(void *arg)
     if(parg->has_torrent) {
         torrent = parg->torrent;
 
-        if(send_handshake(sockfd, torrent->info_hash))
+        if(peer_send_handshake(sockfd, torrent->info_hash))
             goto fail_handshake;
 
-        if(recv_handshake(sockfd, info_hash, peer_id, true))
+        if(peer_recv_handshake(sockfd, info_hash, peer_id, true))
             goto fail_handshake;
 
     }else {
     
-        if(recv_handshake(sockfd, info_hash, peer_id, false))
+        if(peer_recv_handshake(sockfd, info_hash, peer_id, false))
             goto fail_handshake;
 
         peer_conn_t *conn = malloc(sizeof(peer_conn_t));
@@ -253,10 +143,10 @@ static void *peer_connection(void *arg)
             goto fail_handshake;
         }
 
-        if(send_handshake(sockfd, torrent->info_hash))
+        if(peer_send_handshake(sockfd, torrent->info_hash))
             goto fail_handshake;
 
-        if(recv_buff(sockfd, peer_id, sizeof(peer_id))){
+        if(peer_recv_buff(sockfd, peer_id, sizeof(peer_id))){
             /* Did not receive last 20 bytes, the peer id*/
             /* This was likely the tracker probing us, drop the connection*/
             goto fail_handshake;
@@ -264,6 +154,21 @@ static void *peer_connection(void *arg)
 
     }
     log_printf(LOG_LEVEL_INFO, "Handshake with peer %s (ID: %.*s) successful\n", ipstr, 20, peer_id);
+
+    peer_msg_t curr_msg;
+    curr_msg.type = MSG_KEEPALIVE;
+
+    //while(0 == peer_msg_send(sockfd, &curr_msg, torrent)) {
+    //    log_printf(LOG_LEVEL_INFO, "Message sent! Type: %d\n", curr_msg.type);
+
+    //    if(!peer_msg_recv(sockfd, &curr_msg, torrent)){
+    //        log_printf(LOG_LEVEL_DEBUG, "Received message from peer: Type: %d\n", curr_msg.type);
+    //    }else{
+    //        log_printf(LOG_LEVEL_DEBUG, "Failed to receive response\n");
+    //    }
+    //    curr_msg.type = MSG_KEEPALIVE;
+    //    sleep(5);
+    //}
 
     close(sockfd);
     log_printf(LOG_LEVEL_INFO, "Closed peer (%s) socket connection: %d\n", ipstr, sockfd);
@@ -274,6 +179,7 @@ fail_handshake:
     close(sockfd);
 fail_connect:
     free(arg);
+    log_printf(LOG_LEVEL_WARNING, "Aborting peer connection with %s\n", ipstr);
     pthread_exit(NULL);
 }
 

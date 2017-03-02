@@ -14,6 +14,12 @@ typedef enum {
     TORRENT_STATE_PAUSED
 }torrent_state_t;
 
+typedef enum {
+    PIECE_STATE_NOT_REQUESTED,
+    PIECE_STATE_REQUESTED,
+    PIECE_STATE_HAVE
+}piece_state_t;
+
 typedef struct torrent {
     list_t             *pieces;
     unsigned            piece_len;
@@ -26,6 +32,7 @@ typedef struct torrent {
     pthread_t           tracker_thread;
     struct {
     torrent_state_t     state;
+    list_t             *piece_states;
     list_t             *peer_connections;
     unsigned            priority;           /* [0-6] */
     float               progress;           /* [0-1] */
@@ -41,5 +48,6 @@ typedef struct torrent {
 torrent_t  *torrent_init(bencode_obj_t *meta, const char *destdir);
 void        torrent_free(torrent_t *torrent);
 unsigned    torrent_left_to_download(torrent_t *torrent);
+char       *torrent_get_filemem(torrent_t *torrent, unsigned index, size_t size);
 
 #endif

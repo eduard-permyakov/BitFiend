@@ -218,6 +218,8 @@ torrent_t *torrent_init(bencode_obj_t *meta, const char *destdir)
 
     pthread_mutex_init(&ret->sh_lock, NULL); 
     ret->sh.peer_connections = list_init();
+    ret->sh.piece_states = malloc(list_get_size(ret->pieces));
+    memset(ret->sh.piece_states, PIECE_STATE_NOT_REQUESTED, list_get_size(ret->pieces));
     ret->sh.priority = DEFAULT_PRIORITY;
     ret->sh.state = TORRENT_STATE_LEECHING;
     ret->sh.progress = 0.0f;
@@ -243,6 +245,8 @@ void torrent_free(torrent_t *torrent)
         byte_str_free(*(byte_str_t**)entry);
     }
     list_free(torrent->pieces);
+    if(torrent->sh.piece_states)
+        free(torrent->sh.piece_states);
 
     FOREACH_ENTRY(entry, torrent->files){
         dl_file_close_and_free(*(dl_file_t**)entry); 
@@ -268,7 +272,14 @@ void torrent_free(torrent_t *torrent)
 
 unsigned torrent_left_to_download(torrent_t *torrent)
 {
+    //TODO
     return 0;
+}
+
+char *torrent_get_filemem(torrent_t *torrent, unsigned index, size_t size)
+{
+    //TODO
+    return NULL;
 }
 
 //temp
