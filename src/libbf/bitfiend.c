@@ -20,6 +20,13 @@ static pthread_t         s_peer_listener;
 static const uint16_t    s_port = 6889; 
 static pthread_mutex_t   s_torrents_lock = PTHREAD_MUTEX_INITIALIZER;
 static list_t           *s_torrents; 
+/* Threads for incoming peer connections which have been created but not yet associated
+ * with a particular torrent, which can't be done until after handshaking. Store their handles 
+ * here for now, until a torrent_t associates with it and removes the handle from this list */
+static pthread_mutex_t   s_unassoc_peerthreads_lock = PTHREAD_MUTEX_INITIALIZER;
+static list_t           *s_unassoc_peerthreads;
+
+static bool              s_shutdown = false;
 
 int bitfiend_init(void)
 {
@@ -29,6 +36,7 @@ int bitfiend_init(void)
     peer_id_create(g_local_peer_id);
 
     s_torrents = list_init();
+    s_unassoc_peerthreads = list_init();
 
     if(peer_listener_create(&s_peer_listener, &s_port))
         goto fail_start_listener;
@@ -47,9 +55,9 @@ static int shutdown_torrent(torrent_t *torrent)
         goto fail_stop_tracker;
 
     const unsigned char *entry;
-    void *ret;
-    pthread_join(torrent->tracker_thread, &ret);
-    assert(ret == PTHREAD_CANCELED);
+    void *tret;
+    pthread_join(torrent->tracker_thread, &tret);
+    assert(tret == PTHREAD_CANCELED);
 
     pthread_mutex_lock(&torrent->sh_lock);
     const list_iter_t *iter = list_iter_first(torrent->sh.peer_connections);
@@ -59,6 +67,8 @@ static int shutdown_torrent(torrent_t *torrent)
 
         peer_conn_t *conn = *(peer_conn_t**)(list_iter_get_value(iter));
         void *ret;
+
+        pthread_cancel(conn->thread);
         pthread_join(conn->thread, &ret); 
 
         pthread_mutex_lock(&torrent->sh_lock);
@@ -69,6 +79,7 @@ static int shutdown_torrent(torrent_t *torrent)
     torrent_free(torrent);
     return BITFIEND_SUCCESS;
 
+fail_stop_peer:
 fail_stop_tracker:
     return BITFIEND_FAILURE;
 }
@@ -76,16 +87,38 @@ fail_stop_tracker:
 int bitfiend_shutdown(void)
 {
     int ret = BITFIEND_SUCCESS;
+    const unsigned char *entry;
+    void *tret;
+
+    /* Thread join order matters here.
+     * First, join the peer_listener so no new unassociated peers can be added.
+     * Next, join unassociated peers, after which a torrent's peer_connections
+     * list can only grow if its' tracker_thread gives it peers.
+     * Now, iterate over all torrents. Join the tracker thread first. Now no new peer 
+     * threads can be spawned which can touch the torrent. Join the torrent's peers last.
+     */
 
     if(pthread_cancel(s_peer_listener))
         ret = BITFIEND_FAILURE;
 
-    void *tret;
     pthread_join(s_peer_listener, &tret);
     assert(tret == PTHREAD_CANCELED);
 
+    pthread_mutex_lock(&s_unassoc_peerthreads_lock);
+
+    log_printf(LOG_LEVEL_DEBUG, "Cancelling and joining unassociated peer threads. There are %d\n",
+        list_get_size(s_unassoc_peerthreads));
+
+    FOREACH_ENTRY(entry, s_unassoc_peerthreads) {
+        pthread_t thread = *(pthread_t*)entry;
+
+        pthread_cancel(thread);
+        pthread_join(thread, NULL);
+    }
+    list_free(s_unassoc_peerthreads);
+    pthread_mutex_unlock(&s_unassoc_peerthreads_lock);
+
     pthread_mutex_lock(&s_torrents_lock);
-    const unsigned char *entry;
     FOREACH_ENTRY(entry, s_torrents) {
         shutdown_torrent(*(torrent_t**)entry);
     }
@@ -167,8 +200,12 @@ torrent_t *bitfiend_assoc_peer(peer_conn_t *peer, char infohash[20])
             pthread_mutex_lock(&torrent->sh_lock);
 
             log_printf(LOG_LEVEL_INFO, "Associated incoming peer connection with torrent\n");
-            list_add(torrent->sh.peer_connections, (unsigned char*)&peer, sizeof(peer_t*));
+            list_add(torrent->sh.peer_connections, (unsigned char*)&peer, sizeof(peer_conn_t*));
             ret = torrent;
+
+            pthread_mutex_lock(&s_unassoc_peerthreads_lock);
+            list_remove(s_unassoc_peerthreads, (unsigned char*)&peer->thread);
+            pthread_mutex_unlock(&s_unassoc_peerthreads_lock);
 
             pthread_mutex_unlock(&torrent->sh_lock);
 
@@ -179,5 +216,12 @@ torrent_t *bitfiend_assoc_peer(peer_conn_t *peer, char infohash[20])
     pthread_mutex_unlock(&s_torrents_lock);
 
     return ret;
+}
+
+void bitfiend_add_unassoc_peer(pthread_t thread)
+{
+    pthread_mutex_lock(&s_unassoc_peerthreads_lock);
+    list_add(s_unassoc_peerthreads, (unsigned char*)&thread, sizeof(pthread_t));
+    pthread_mutex_unlock(&s_unassoc_peerthreads_lock);
 }
 

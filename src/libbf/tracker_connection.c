@@ -134,14 +134,15 @@ static void *periodic_announce(void *arg)
             extern void print_tracker_response(tracker_announce_resp_t *resp);
             print_tracker_response(resp);
             interval = resp->interval;
+            log_printf(LOG_LEVEL_DEBUG, "Re-announcing to tracker again in %d seconds\n", interval);
 
             const unsigned char *entry;
             FOREACH_ENTRY(entry, resp->peers) {
                 create_peer_connection(*(peer_t**)entry, targ->torrent);
             }
         }else{
-            log_printf(LOG_LEVEL_INFO, "Retrying announcing to tracker in %d seconds\n", interval);
             interval = TRACKER_RETRY_INTERVAL;
+            log_printf(LOG_LEVEL_INFO, "Retrying announcing to tracker in %d seconds\n", interval);
         }
 
         tracker_announce_request_free(req);

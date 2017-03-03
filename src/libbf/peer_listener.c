@@ -2,6 +2,7 @@
 #include "log.h"
 #include "peer.h"
 #include "peer_connection.h"
+#include "bitfiend_internal.h"
 
 #include <stdbool.h>
 #include <string.h>
@@ -76,30 +77,29 @@ static void peer_listen_cleanup(void *arg)
 
 static int create_peer_connection(peer_t *peer, int sockfd)
 {
-    peer_conn_t *conn = malloc(sizeof(peer_conn_t));            
-    if(!conn)
-        return -1;
-    conn->peer = *peer;
-
     peer_arg_t *arg = malloc(sizeof(peer_arg_t));    
-    if(!arg) {
-        free(conn);
-        return -1;
-    }
+    if(!arg)
+        goto fail_alloc;
+
     arg->has_torrent = false;
     arg->has_sockfd = true;
     arg->sockfd = sockfd;
     arg->peer = *peer;
 
-    if(peer_connection_create(&conn->thread, arg))
+    pthread_t newthread;
+    if(peer_connection_create(&newthread, arg))
         goto fail_create;
-    
+
+    bitfiend_add_unassoc_peer(newthread);
+
+    free(peer);
     return 0;
 
 fail_create:
-    log_printf(LOG_LEVEL_ERROR, "Failed to create peer thread\n");
     free(arg);
-    free(conn);
+fail_alloc:
+    free(peer);
+    log_printf(LOG_LEVEL_ERROR, "Failed to create peer thread\n");
     return -1;
 }
 
@@ -129,10 +129,8 @@ static void *peer_listen(void *arg)
         peer_sockfd = accept(sockfd, &peersock, &len);
         pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
 
-        if(peer_sockfd < 0){
-            printf("ERROR PEER SOCKFD!\n");
+        if(peer_sockfd < 0)
             continue;
-        }
     
         log_printf(LOG_LEVEL_INFO, "Peer connection accepted (sockfd: %d)\n", peer_sockfd);
 

@@ -91,8 +91,23 @@ fail:
     return -1;
 }
 
+static void peer_connection_cleanup(void *arg)
+{
+    peer_arg_t *parg = (peer_arg_t*)arg;
+    char ipstr[INET6_ADDRSTRLEN];
+    print_ip(&parg->peer, ipstr, sizeof(ipstr));
+
+    if(parg->has_sockfd)
+        close(parg->sockfd);
+    log_printf(LOG_LEVEL_INFO, "Closed peer connection: %s\n", ipstr);
+    free(arg);
+}
+
 static void *peer_connection(void *arg)
 {
+    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+    pthread_cleanup_push(peer_connection_cleanup, arg){
+
     peer_arg_t *parg = (peer_arg_t*)arg;
     char ipstr[INET6_ADDRSTRLEN];
     print_ip(&parg->peer, ipstr, sizeof(ipstr));
@@ -100,10 +115,15 @@ static void *peer_connection(void *arg)
     int sockfd;
     torrent_t *torrent;
 
+
     if(parg->has_sockfd) {
         sockfd = parg->sockfd;
     }else{
-        sockfd = peer_connect(arg);
+        if((sockfd = peer_connect(arg)) < 0)
+            goto fail_connect;
+
+        parg->sockfd = sockfd;
+        parg->has_sockfd = true;
     }
     if(sockfd < 0)
         goto fail_connect;
@@ -158,29 +178,36 @@ static void *peer_connection(void *arg)
     peer_msg_t curr_msg;
     curr_msg.type = MSG_KEEPALIVE;
 
-    //while(0 == peer_msg_send(sockfd, &curr_msg, torrent)) {
-    //    log_printf(LOG_LEVEL_INFO, "Message sent! Type: %d\n", curr_msg.type);
+    while(true) {
+        // 1. send msg
+        // 2. receive msg
+        // 3. build up next msg to send;
+        // 4. test cancel
 
-    //    if(!peer_msg_recv(sockfd, &curr_msg, torrent)){
-    //        log_printf(LOG_LEVEL_DEBUG, "Received message from peer: Type: %d\n", curr_msg.type);
-    //    }else{
-    //        log_printf(LOG_LEVEL_DEBUG, "Failed to receive response\n");
-    //    }
-    //    curr_msg.type = MSG_KEEPALIVE;
-    //    sleep(5);
-    //}
+        //log_printf(LOG_LEVEL_INFO, "Message sent! Type: %d\n", curr_msg.type);
 
-    close(sockfd);
-    log_printf(LOG_LEVEL_INFO, "Closed peer (%s) socket connection: %d\n", ipstr, sockfd);
-    free(arg);
+        //if(!peer_msg_recv(sockfd, &curr_msg, torrent)){
+        //    log_printf(LOG_LEVEL_DEBUG, "Received message from peer: Type: %d\n", curr_msg.type);
+        //}else{
+        //    log_printf(LOG_LEVEL_DEBUG, "Failed to receive response\n");
+        //}
+        //curr_msg.type = MSG_KEEPALIVE;
+
+
+        pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
+        /* Cancellation point */
+        sleep(5);
+        pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+    }
+
     pthread_exit(NULL);
 
 fail_handshake:
-    close(sockfd);
 fail_connect:
-    free(arg);
     log_printf(LOG_LEVEL_WARNING, "Aborting peer connection with %s\n", ipstr);
     pthread_exit(NULL);
+
+    }pthread_cleanup_pop(0);
 }
 
 int peer_connection_create(pthread_t *thread, peer_arg_t *arg)
