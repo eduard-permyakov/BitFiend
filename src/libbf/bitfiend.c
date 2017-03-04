@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <signal.h>
 
 static pthread_t         s_peer_listener;
 static const uint16_t    s_port = 6889; 
@@ -51,8 +52,7 @@ fail_start_listener:
 
 static int shutdown_torrent(torrent_t *torrent)
 {
-    if(pthread_cancel(torrent->tracker_thread))
-        goto fail_stop_tracker;
+    pthread_cancel(torrent->tracker_thread);
 
     const unsigned char *entry;
     void *tret;
@@ -64,11 +64,17 @@ static int shutdown_torrent(torrent_t *torrent)
     pthread_mutex_unlock(&torrent->sh_lock);
 
     while(iter){
-
         peer_conn_t *conn = *(peer_conn_t**)(list_iter_get_value(iter));
         void *ret;
 
+        char queue_name[64];
+        peer_connection_queue_name(conn->thread, queue_name, sizeof(queue_name));
+        mq_unlink(queue_name);
+
         pthread_cancel(conn->thread);
+        /* Interrupt any blocking call the peer thread may be waiting on 
+         * While they should time out, this results in consistently fast shutdown of the client */
+        pthread_kill(conn->thread, SIGINT);
         pthread_join(conn->thread, &ret); 
 
         pthread_mutex_lock(&torrent->sh_lock);
@@ -114,6 +120,10 @@ int bitfiend_shutdown(void)
 
         pthread_cancel(thread);
         pthread_join(thread, NULL);
+
+        char queue_name[64];
+        peer_connection_queue_name(thread, queue_name, sizeof(queue_name));
+        mq_unlink(queue_name);
     }
     list_free(s_unassoc_peerthreads);
     pthread_mutex_unlock(&s_unassoc_peerthreads_lock);
@@ -198,16 +208,14 @@ torrent_t *bitfiend_assoc_peer(peer_conn_t *peer, char infohash[20])
         if(!memcmp(torrent->info_hash, infohash, sizeof(torrent->info_hash))) {
 
             pthread_mutex_lock(&torrent->sh_lock);
-
             log_printf(LOG_LEVEL_INFO, "Associated incoming peer connection with torrent\n");
             list_add(torrent->sh.peer_connections, (unsigned char*)&peer, sizeof(peer_conn_t*));
             ret = torrent;
+            pthread_mutex_unlock(&torrent->sh_lock);
 
             pthread_mutex_lock(&s_unassoc_peerthreads_lock);
             list_remove(s_unassoc_peerthreads, (unsigned char*)&peer->thread);
             pthread_mutex_unlock(&s_unassoc_peerthreads_lock);
-
-            pthread_mutex_unlock(&torrent->sh_lock);
 
             break;
         }
@@ -223,5 +231,34 @@ void bitfiend_add_unassoc_peer(pthread_t thread)
     pthread_mutex_lock(&s_unassoc_peerthreads_lock);
     list_add(s_unassoc_peerthreads, (unsigned char*)&thread, sizeof(pthread_t));
     pthread_mutex_unlock(&s_unassoc_peerthreads_lock);
+}
+
+int bitfiend_notify_peers_have(torrent_t *torrent, unsigned have_index)
+{
+    int ret = 0;
+    const unsigned char *entry;
+    pthread_mutex_lock(&torrent->sh_lock);
+        
+    FOREACH_ENTRY(entry, torrent->sh.peer_connections) {
+        peer_conn_t *conn = *(peer_conn_t**)entry;
+
+        if(conn->thread == pthread_self())
+            continue;
+        
+        char queue_name[64];
+        peer_connection_queue_name(conn->thread, queue_name, sizeof(queue_name));
+        mqd_t queue = mq_open(queue_name, O_RDONLY | O_NONBLOCK);
+        if(queue != (mqd_t)-1) {
+            mq_send(queue, (char*)&have_index, sizeof(unsigned), 0);     
+            mq_close(queue);
+        }else{
+            ret = -1;
+            log_printf(LOG_LEVEL_ERROR, "Could not open queue for sending: %s\n", queue_name);
+        }
+    }
+
+    pthread_mutex_unlock(&torrent->sh_lock);
+
+    return ret;
 }
 

@@ -1,6 +1,7 @@
 CC=gcc
 CFLAGS=-std=gnu99 -pthread -g
 DEFS=-D_FILE_OFFSET_BITS=64 -D__USE_BSD
+LD=-lrt
 BIN=./bin/bitfiend
 
 LIBBF_SRCS=$(wildcard ./src/libbf/*.c)
@@ -13,7 +14,7 @@ LIBBF_DEPS=$(LIBBF_OBJS:%.o=%.d)
 
 bitfiend: $(LIBBF_OBJS)
 	@mkdir -p ./bin
-	$(CC) $(CFLAGS) $(LIBBF_OBJS) -o $(BIN)
+	$(CC) $(CFLAGS) $(LIBBF_OBJS) -o $(BIN) $(LD)
 
 -include $(LIBBF_DEPS)
 

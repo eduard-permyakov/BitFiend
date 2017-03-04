@@ -48,6 +48,6 @@ typedef struct torrent {
 torrent_t  *torrent_init(bencode_obj_t *meta, const char *destdir);
 void        torrent_free(torrent_t *torrent);
 unsigned    torrent_left_to_download(torrent_t *torrent);
-char       *torrent_get_filemem(torrent_t *torrent, unsigned index, size_t size);
+char       *torrent_get_filemem(const torrent_t *torrent, unsigned index, size_t size);
 
 #endif

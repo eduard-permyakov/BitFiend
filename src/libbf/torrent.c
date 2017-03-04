@@ -276,7 +276,7 @@ unsigned torrent_left_to_download(torrent_t *torrent)
     return 0;
 }
 
-char *torrent_get_filemem(torrent_t *torrent, unsigned index, size_t size)
+char *torrent_get_filemem(const torrent_t *torrent, unsigned index, size_t size)
 {
     //TODO
     return NULL;
