@@ -43,14 +43,15 @@ typedef struct peer_msg {
     }payload;
 }peer_msg_t;
 
-int peer_send_buff(int sockfd, const char *buff, size_t len);
-int peer_recv_buff(int sockfd, char *buff, size_t len);
-int peer_send_handshake(int sockfd, char infohash[20]);
-int peer_recv_handshake(int sockfd, char outhash[20], char outpeerid[20], bool peer_id);
-int peer_msg_send(int sockfd, peer_msg_t *msg, const torrent_t *torrent);
-int peer_msg_recv(int sockfd, peer_msg_t *out, const torrent_t *torrent);
+int  peer_send_buff(int sockfd, const char *buff, size_t len);
+int  peer_recv_buff(int sockfd, char *buff, size_t len);
+int  peer_send_handshake(int sockfd, char infohash[20]);
+int  peer_recv_handshake(int sockfd, char outhash[20], char outpeerid[20], bool peer_id);
+int  peer_msg_send(int sockfd, peer_msg_t *msg, const torrent_t *torrent);
+int  peer_msg_recv(int sockfd, peer_msg_t *out, const torrent_t *torrent);
 /* Wait up to "timeout" seconds until the first byte of the message comes.
  * The initial recv is a thread cancellation point. */
-int peer_msg_waiton_recv(int sockfd, peer_msg_t *out, const torrent_t *torrent, unsigned timeout);
+int  peer_msg_waiton_recv(int sockfd, peer_msg_t *out, const torrent_t *torrent, unsigned timeout);
+bool peer_msg_buff_nonempty(int sockfd);
 
 #endif

@@ -32,7 +32,7 @@ typedef struct torrent {
     pthread_t           tracker_thread;
     struct {
     torrent_state_t     state;
-    list_t             *piece_states;
+    char               *piece_states;
     list_t             *peer_connections;
     unsigned            priority;           /* [0-6] */
     float               progress;           /* [0-1] */
@@ -45,9 +45,10 @@ typedef struct torrent {
     pthread_mutex_t     sh_lock;
 }torrent_t;
 
-torrent_t  *torrent_init(bencode_obj_t *meta, const char *destdir);
-void        torrent_free(torrent_t *torrent);
-unsigned    torrent_left_to_download(torrent_t *torrent);
-char       *torrent_get_filemem(const torrent_t *torrent, unsigned index, size_t size);
+torrent_t     *torrent_init(bencode_obj_t *meta, const char *destdir);
+void           torrent_free(torrent_t *torrent);
+unsigned       torrent_left_to_download(torrent_t *torrent);
+char          *torrent_get_filemem(const torrent_t *torrent, unsigned index, size_t size);
+unsigned char *torrent_make_bitfield(const torrent_t *torrent);
 
 #endif

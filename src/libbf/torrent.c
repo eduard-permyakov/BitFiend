@@ -3,6 +3,7 @@
 #include "log.h"
 #include "dl_file.h"
 #include "peer_connection.h"
+#include "lbitfield.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -280,6 +281,22 @@ char *torrent_get_filemem(const torrent_t *torrent, unsigned index, size_t size)
 {
     //TODO
     return NULL;
+}
+
+unsigned char *torrent_make_bitfield(const torrent_t *torrent)
+{
+    unsigned num_pieces = list_get_size(torrent->pieces);
+    unsigned len = LBITFIELD_NUM_BYTES(num_pieces);
+    unsigned char *ret = calloc(len, 1);
+
+    if(!ret)
+        return ret;
+
+    for(int i = 0; i < num_pieces; i++) {
+        if(torrent->sh.piece_states[i] == PIECE_STATE_HAVE)
+            LBITFIELD_SET(i, ret);
+    }
+    return ret;
 }
 
 //temp

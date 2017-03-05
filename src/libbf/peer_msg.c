@@ -148,7 +148,6 @@ static inline bool valid_len(msg_type_t type, const torrent_t *torrent, uint32_t
 
 static int peer_msg_recv_pastlen(int sockfd, peer_msg_t *out, const torrent_t *torrent, uint32_t len)
 {
-    char *buff = NULL;
     if(len == 0){
         out->type = MSG_KEEPALIVE;
         return 0;
@@ -167,96 +166,91 @@ static int peer_msg_recv_pastlen(int sockfd, peer_msg_t *out, const torrent_t *t
     out->type = type;
     unsigned left = len - 1;      
 
-    /* When we get a piece, write it to the mmap'd file directly */
-    if(type == MSG_PIECE){
-        assert(left > 0);
-        uint32_t u32;
-        
-        if(peer_recv_buff(sockfd, (char*)&u32, sizeof(u32)))
-            return -1;
-        out->payload.piece.index = ntohl(u32);
-        left -= sizeof(uint32_t);
+    switch(type){
+        /* When we get a piece, write it to the mmap'd file directly */
+        case MSG_PIECE:
+        {
+            assert(left > 0);
+            uint32_t u32;
+            
+            if(peer_recv_buff(sockfd, (char*)&u32, sizeof(u32)))
+                return -1;
+            out->payload.piece.index = ntohl(u32);
+            left -= sizeof(uint32_t);
 
-        if(peer_recv_buff(sockfd, (char*)&u32, sizeof(u32)))
-            return -1;
-        out->payload.piece.begin = ntohl(u32);
-        left -= sizeof(uint32_t);
+            if(peer_recv_buff(sockfd, (char*)&u32, sizeof(u32)))
+                return -1;
+            out->payload.piece.begin = ntohl(u32);
+            left -= sizeof(uint32_t);
 
-        char *piecebuff = torrent_get_filemem(torrent, out->payload.piece.index,
-            out->payload.piece.blocklen);
-        if(!piecebuff)
-            return -1;
+            char *piecebuff = torrent_get_filemem(torrent, out->payload.piece.index,
+                out->payload.piece.blocklen);
+            if(!piecebuff)
+                return -1;
 
-        out->payload.piece.blocklen = left;
-        if(peer_recv_buff(sockfd, piecebuff + out->payload.piece.begin, left))
-            return -1;
-
-        log_printf(LOG_LEVEL_INFO, "Successfully downloaded block from peer (index: %d, begin: %d)\n",
-            out->payload.piece.index, out->payload.piece.begin);
-        return 0;
-
-    }else if(left > 0){
-
-        //char buff[left];
-        buff = malloc(left);
-        if(!buff)
-            return -1;
-
-        if(peer_recv_buff(sockfd, buff, left))
-            goto fail;
-
-        switch(type) {
-            case MSG_BITFIELD:
-            {
-                out->payload.bitfield = byte_str_new(left, "");  
-                if(!out->payload.bitfield)
-                    goto fail;
-                memcpy(out->payload.bitfield->str, buff, left);
-                break;
+            out->payload.piece.blocklen = left;
+            if(peer_recv_buff(sockfd, piecebuff + out->payload.piece.begin, left)){
+                //free piecebuff 
+                return -1;
             }
-            case MSG_REQUEST:
-            { 
-                assert(sizeof(buff) ==  4 * sizeof(uint32_t));
-                uint32_t u32;  
-                memcpy(&u32, buff, sizeof(uint32_t));
-                out->payload.request.index= ntohl(u32);
 
-                memcpy(&u32, buff + sizeof(uint32_t), sizeof(uint32_t));
-                out->payload.request.begin= ntohl(u32);
-
-                memcpy(&u32, buff + 2 * sizeof(uint32_t), sizeof(uint32_t));
-                out->payload.request.length = ntohl(u32);
-                break;
-            }
-            case MSG_HAVE:
-            {
-                uint32_t u32;  
-                assert(left ==  sizeof(uint32_t));
-                memcpy(&u32, buff, sizeof(uint32_t));
-                out->payload.have = ntohl(u32);
-                break;
-            }
-            case MSG_PORT:
-            {
-                uint32_t u32;  
-                assert(sizeof(buff) ==  sizeof(uint32_t));
-                memcpy(&u32, buff, sizeof(uint32_t));
-                out->payload.listen_port = ntohl(u32);
-                break;
-            }
-            default:
-                goto fail;
+            break;
         }
+        case MSG_BITFIELD:
+        {
+            char buff[left];
+            if(peer_recv_buff(sockfd, buff, left))
+                return -1;
+
+            out->payload.bitfield = byte_str_new(left, "");  
+            if(!out->payload.bitfield)
+                return -1;
+            memcpy(out->payload.bitfield->str, buff, left);
+            break;
+        }
+        case MSG_REQUEST:
+        { 
+            char buff[left];
+            if(peer_recv_buff(sockfd, buff, left))
+                return -1;
+
+            assert(sizeof(buff) ==  4 * sizeof(uint32_t));
+            uint32_t u32;  
+            memcpy(&u32, buff, sizeof(uint32_t));
+            out->payload.request.index= ntohl(u32);
+
+            memcpy(&u32, buff + sizeof(uint32_t), sizeof(uint32_t));
+            out->payload.request.begin= ntohl(u32);
+
+            memcpy(&u32, buff + 2 * sizeof(uint32_t), sizeof(uint32_t));
+            out->payload.request.length = ntohl(u32);
+            break;
+        }
+        case MSG_HAVE:
+        {
+            uint32_t u32;  
+            assert(left ==  sizeof(uint32_t));
+            if(peer_recv_buff(sockfd, (char*)&u32, left))
+                return -1;
+            out->payload.have = ntohl(u32);
+            break;
+        }
+        case MSG_PORT:
+        {
+            uint32_t u32;  
+            assert(left ==  sizeof(uint32_t));
+            if(peer_recv_buff(sockfd, (char*)&u32, left))
+                return -1;
+            out->payload.listen_port = ntohl(u32);
+            break;
+        }
+        default:
+            return -1;
     }
     
-    if(buff)
-        free(buff);
     log_printf(LOG_LEVEL_DEBUG, "Successfully received message from peer, Type: %hhu\n", type);
     return 0;      
 
-fail:
-    free(buff);
-    return -1;
 }
 
 int peer_msg_send(int sockfd, peer_msg_t *msg, const torrent_t *torrent)
@@ -383,3 +377,11 @@ int peer_msg_waiton_recv(int sockfd, peer_msg_t *out, const torrent_t *torrent, 
     return peer_msg_recv_pastlen(sockfd, out, torrent, len);
 }
 
+bool peer_msg_buff_nonempty(int sockfd)
+{
+    uint32_t len;
+    int n = recv(sockfd, (char*)&len, sizeof(uint32_t), MSG_PEEK | MSG_DONTWAIT);
+    if(n < sizeof(uint32_t))
+        return false;
+    return true;    
+}

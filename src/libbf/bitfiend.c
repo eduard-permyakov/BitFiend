@@ -247,9 +247,11 @@ int bitfiend_notify_peers_have(torrent_t *torrent, unsigned have_index)
         
         char queue_name[64];
         peer_connection_queue_name(conn->thread, queue_name, sizeof(queue_name));
-        mqd_t queue = mq_open(queue_name, O_RDONLY | O_NONBLOCK);
+        mqd_t queue = mq_open(queue_name, O_WRONLY | O_NONBLOCK);
         if(queue != (mqd_t)-1) {
-            mq_send(queue, (char*)&have_index, sizeof(unsigned), 0);     
+            if(mq_send(queue, (char*)&have_index, sizeof(unsigned), 0)) {
+               log_printf(LOG_LEVEL_ERROR, "Failed to send have event to peer threads\n"); 
+            }
             mq_close(queue);
         }else{
             ret = -1;
