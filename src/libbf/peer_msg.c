@@ -3,6 +3,8 @@
 #include "peer_id.h"
 #include "peer_connection.h"
 #include "lbitfield.h"
+#include "piece_request.h"
+#include "dl_file.h"
 
 #include <assert.h>
 #include <string.h>
@@ -12,6 +14,8 @@
 #include <netinet/in.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 int peer_send_buff(int sockfd, const char *buff, size_t len)
 {
@@ -146,6 +150,43 @@ static inline bool valid_len(msg_type_t type, const torrent_t *torrent, uint32_t
     return (len == msgbuff_len(type, torrent));
 }
 
+static int peer_msg_recv_piece(int sockfd, peer_msg_t *out, const torrent_t *torrent, uint32_t len)
+{
+    log_printf(LOG_LEVEL_DEBUG, "*** peer_msg_recv_piece ***\n");
+    uint32_t u32, left = len;
+    
+    if(peer_recv_buff(sockfd, (char*)&u32, sizeof(u32)))
+        return -1;
+    out->payload.piece.index = ntohl(u32);
+    left -= sizeof(uint32_t);
+
+    if(peer_recv_buff(sockfd, (char*)&u32, sizeof(u32)))
+        return -1;
+    out->payload.piece.begin = ntohl(u32);
+    left -= sizeof(uint32_t);
+
+    out->payload.piece.blocklen = left;
+    piece_request_t *pr = piece_request_create(torrent, out->payload.piece.index);
+    if(!pr)
+        return -1;
+    
+    block_request_t *br = piece_request_block_at(pr, out->payload.piece.begin);
+    assert(br);
+    const unsigned char *entry;
+    FOREACH_ENTRY(entry, br->filemems) {
+        filemem_t mem = *(filemem_t*)entry;
+        if(peer_recv_buff(sockfd, mem.mem, mem.size))
+            goto fail_recv_piece;
+
+    }
+    piece_request_free(pr);
+    return 0;
+
+fail_recv_piece:
+    piece_request_free(pr);
+    return -1;
+}
+
 static int peer_msg_recv_pastlen(int sockfd, peer_msg_t *out, const torrent_t *torrent, uint32_t len)
 {
     if(len == 0){
@@ -171,30 +212,10 @@ static int peer_msg_recv_pastlen(int sockfd, peer_msg_t *out, const torrent_t *t
         case MSG_PIECE:
         {
             assert(left > 0);
-            uint32_t u32;
-            
-            if(peer_recv_buff(sockfd, (char*)&u32, sizeof(u32)))
+            if(peer_msg_recv_piece(sockfd, out, torrent, left))
                 return -1;
-            out->payload.piece.index = ntohl(u32);
-            left -= sizeof(uint32_t);
-
-            if(peer_recv_buff(sockfd, (char*)&u32, sizeof(u32)))
-                return -1;
-            out->payload.piece.begin = ntohl(u32);
-            left -= sizeof(uint32_t);
-
-            char *piecebuff = torrent_get_filemem(torrent, out->payload.piece.index,
-                out->payload.piece.blocklen);
-            if(!piecebuff)
-                return -1;
-
-            out->payload.piece.blocklen = left;
-            if(peer_recv_buff(sockfd, piecebuff + out->payload.piece.begin, left)){
-                //free piecebuff 
-                return -1;
-            }
-
             break;
+
         }
         case MSG_BITFIELD:
         {
@@ -253,6 +274,48 @@ static int peer_msg_recv_pastlen(int sockfd, peer_msg_t *out, const torrent_t *t
 
 }
 
+static int peer_msg_send_piece(int sockfd, piece_msg_t *pmsg, const torrent_t *torrent)
+{
+    log_printf(LOG_LEVEL_DEBUG, "*** peer_msg_send_piece ***\n");
+    piece_request_t *pr = piece_request_create(torrent, pmsg->index);
+    if(!pr)
+        return -1;
+
+    size_t written = 0;
+    off_t offset = 0;
+
+    const unsigned char *entry;
+    FOREACH_ENTRY(entry, pr->block_requests) {
+        block_request_t *br = *(block_request_t**)entry;
+
+        const unsigned char *fmem; 
+        FOREACH_ENTRY(fmem, br->filemems) {
+            filemem_t mem = *(filemem_t*)fmem;
+            
+            if(offset + mem.size > pmsg->begin) {
+                size_t membegin = (offset < pmsg->begin) ? pmsg->begin - offset : 0;
+                size_t memlen = MIN(mem.size - membegin, pmsg->blocklen - written); 
+
+                if(peer_send_buff(sockfd, ((char*)mem.mem) + membegin, memlen))
+                    goto fail_send_piece;
+
+                written += memlen;
+            }
+
+            if(written == pmsg->blocklen)
+                break;
+
+            offset += mem.size;
+        }
+    }
+    piece_request_free(pr);
+    return 0;
+
+fail_send_piece:
+    piece_request_free(pr);
+    return -1;
+}
+
 int peer_msg_send(int sockfd, peer_msg_t *msg, const torrent_t *torrent)
 {
     uint32_t len = msgbuff_len(msg->type, torrent);
@@ -282,14 +345,8 @@ int peer_msg_send(int sockfd, peer_msg_t *msg, const torrent_t *torrent)
         }
         case MSG_PIECE:
         {
-            const char *piecebuff  = torrent_get_filemem(torrent, msg->payload.piece.index, 
-                msg->payload.piece.begin);
-            if(!piecebuff)
-                return -1;
-            if(peer_send_buff(sockfd, piecebuff + msg->payload.piece.begin, msg->payload.piece.blocklen))
-                return -1;
-
-            return 0;
+            piece_msg_t *pmsg = &msg->payload.piece;
+            return peer_msg_send_piece(sockfd, pmsg, torrent);
         }
         case MSG_BITFIELD:
         {

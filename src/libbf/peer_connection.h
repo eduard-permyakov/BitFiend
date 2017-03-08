@@ -6,7 +6,8 @@
 #include "torrent.h"
 #include "peer.h"
 
-#define PEER_REQUEST_SIZE        (2 << 14)
+#define KB                (1 << 10)
+#define PEER_REQUEST_SIZE (16 * KB)
 
 typedef struct peer_arg {
     bool        has_torrent;

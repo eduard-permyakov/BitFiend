@@ -25,12 +25,16 @@ static void skip_until_index(const list_iter_t **iter, off_t *offset, unsigned i
     }
 }
 
-static block_request_t *next_block_request(const list_iter_t **iter, off_t *offset, size_t *left)
+static block_request_t *next_block_request(const list_iter_t **iter, off_t *offset, size_t *left, 
+                                           size_t piecelen)
 {
     if(!*iter || *left == 0)
         return NULL;
 
     block_request_t *ret = malloc(sizeof(block_request_t));    
+    ret->begin = piecelen - *left;
+    ret->completed = false;
+    ret->len = 0;
     if(!ret)
         return NULL;
     ret->filemems = list_init();
@@ -65,6 +69,7 @@ static block_request_t *next_block_request(const list_iter_t **iter, off_t *offs
 
     }while(curr_size < PEER_REQUEST_SIZE && *iter != NULL);
 
+    ret->len = curr_size;
     return ret;
 }
 
@@ -88,10 +93,11 @@ piece_request_t *piece_request_create(const torrent_t *torrent, unsigned index)
                                     * at the iterator have already been 'consumed' */
     skip_until_index(&iter, &offset, index, torrent);
 
-    while(block = next_block_request(&iter, &offset, &left)) {
+    while(block = next_block_request(&iter, &offset, &left, torrent->piece_len)) {
         list_add(ret->block_requests, (unsigned char*)&block, sizeof(block_request_t*));
     }
 
+    ret->blocks_left = list_get_size(ret->block_requests);
     return ret;
 
 fail_alloc_entry: ;
@@ -114,5 +120,17 @@ void piece_request_free(piece_request_t *request)
         free(br);
     }
     free(request);
+}
+
+block_request_t *piece_request_block_at(piece_request_t *request, off_t offset)
+{
+    const unsigned char *entry;
+    FOREACH_ENTRY(entry, request->block_requests) {
+        block_request_t *req = *(block_request_t**)entry;
+    
+        if(req->begin == offset)
+            return req;
+    }
+    return NULL;
 }
 

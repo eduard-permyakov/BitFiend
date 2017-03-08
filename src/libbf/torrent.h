@@ -48,7 +48,7 @@ typedef struct torrent {
 torrent_t     *torrent_init(bencode_obj_t *meta, const char *destdir);
 void           torrent_free(torrent_t *torrent);
 unsigned       torrent_left_to_download(torrent_t *torrent);
-char          *torrent_get_filemem(const torrent_t *torrent, unsigned index, size_t size);
 unsigned char *torrent_make_bitfield(const torrent_t *torrent);
+bool           torrent_sha1_verify(const torrent_t *torrent, unsigned index);
 
 #endif

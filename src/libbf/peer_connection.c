@@ -3,6 +3,9 @@
 #include "bitfiend_internal.h"
 #include "peer_msg.h"
 #include "lbitfield.h"
+#include "list.h"
+#include "queue.h"
+#include "piece_request.h"
 
 #include <string.h>
 #include <stdbool.h>
@@ -33,6 +36,8 @@ typedef struct {
     size_t         bitlen;
     unsigned       pieces_sent;
     unsigned       pieces_recvd;
+    queue_t       *peer_requests;
+    list_t        *local_requests;
 }conn_state_t;
 
 static conn_state_t *conn_state_init(torrent_t *torrent)
@@ -57,6 +62,14 @@ static conn_state_t *conn_state_init(torrent_t *torrent)
     if(!ret->peer_wants)
         goto fail_peer_wants;
 
+    ret->peer_requests = queue_init(sizeof(request_msg_t), 16);
+    if(!ret->peer_requests)
+        goto fail_peer_reqs;
+
+    ret->local_requests = list_init();
+    if(!ret->local_requests)
+        goto fail_local_reqs;
+
     pthread_mutex_lock(&torrent->sh_lock);
     ret->local_have = torrent_make_bitfield(torrent);
     pthread_mutex_unlock(&torrent->sh_lock);
@@ -69,6 +82,10 @@ static conn_state_t *conn_state_init(torrent_t *torrent)
     return ret;
 
 fail_local_have:
+    free(ret->local_requests);
+fail_local_reqs:
+    free(ret->peer_requests);
+fail_peer_reqs:
     free(ret->peer_wants);
 fail_peer_wants:
     free(ret->peer_have);
@@ -84,6 +101,14 @@ static void conn_state_cleanup(void *arg)
     free(state->peer_have);
     free(state->peer_wants);
     free(state->local_have);
+    queue_free(state->peer_requests);
+
+    const unsigned char *entry;
+    FOREACH_ENTRY(entry, state->local_requests){
+        piece_request_free(*(piece_request_t**)entry);
+    }
+    list_free(state->local_requests);
+
     free(state);
 }
 
@@ -250,6 +275,37 @@ static void service_have_events(int sockfd, mqd_t queue, const torrent_t *torren
     }
 }
 
+static void process_piece_msg(conn_state_t *state, piece_msg_t *msg)
+{
+    /* The block got written to the underlying file(s) already from tcp buffer by the recv routine.
+     * Here we check if we've gotten a complete piece so far, verify it by the SHA1 hash if so,
+     * and update the torrent state*/
+
+    const unsigned char *entry;
+    FOREACH_ENTRY(entry, state->local_requests) {
+        piece_request_t *curr = *(piece_request_t**)entry;
+
+        if(curr->piece_index == msg->index) {
+
+            const unsigned char *block;
+            FOREACH_ENTRY(block, curr->block_requests) {
+                block_request_t *br = *(block_request_t**)block;
+
+                if(br->len == msg->blocklen && br->begin == msg->begin) {
+                    br->completed = true;                             
+                    curr->blocks_left--;
+                    break;     
+                }
+            }
+
+            if(curr->blocks_left == 0){
+                /*We've got the entire piece!*/
+            }
+
+        }
+    }
+}
+
 static void process_msg(peer_msg_t *msg, conn_state_t *state, torrent_t *torrent)
 {
     switch(msg->type){
@@ -274,13 +330,13 @@ static void process_msg(peer_msg_t *msg, conn_state_t *state, torrent_t *torrent
             memcpy(state->peer_have, msg->payload.bitfield->str, LBITFIELD_NUM_BYTES(state->bitlen));    
             break;
         case MSG_REQUEST:
-            //TODO: add this request to queue of state
+            queue_push(state->peer_requests, &msg->payload.request);
             break; 
         case MSG_PIECE:
-            /* The piece got written to the underlying file already from tcp buffer */
-            /* Keep track of which area of the "entire piece" was written */
-            /* Once we have an "entire piece", check its' hash & update torrent state*/
+        {
+            process_piece_msg(state, &msg->payload.piece);
             break;
+        }
         case MSG_CANCEL:
             /*Remove the request from the request queue */
             break;
@@ -356,8 +412,7 @@ static void *peer_connection(void *arg)
 
             peer_msg_t msg;
 
-            int ret;
-            if(ret = peer_msg_recv(sockfd, &msg, torrent))
+            if(peer_msg_recv(sockfd, &msg, torrent))
                 goto abort_conn;
             process_msg(&msg, state, torrent);
             if(msg.type == MSG_BITFIELD)

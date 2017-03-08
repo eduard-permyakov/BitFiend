@@ -277,12 +277,6 @@ unsigned torrent_left_to_download(torrent_t *torrent)
     return 0;
 }
 
-char *torrent_get_filemem(const torrent_t *torrent, unsigned index, size_t size)
-{
-    //TODO
-    return NULL;
-}
-
 unsigned char *torrent_make_bitfield(const torrent_t *torrent)
 {
     unsigned num_pieces = list_get_size(torrent->pieces);
@@ -297,6 +291,12 @@ unsigned char *torrent_make_bitfield(const torrent_t *torrent)
             LBITFIELD_SET(i, ret);
     }
     return ret;
+}
+
+
+bool torrent_sha1_verify(const torrent_t *torrent, unsigned index)
+{
+
 }
 
 //temp
