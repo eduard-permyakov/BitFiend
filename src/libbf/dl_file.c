@@ -83,9 +83,9 @@ int dl_file_close_and_free(dl_file_t *file)
     return ret;
 }
 
-int dl_file_write(size_t offset, const unsigned char *data, size_t len)
+void dl_file_getfilemem(const dl_file_t *file, filemem_t *out)
 {
-
+    out->mem = file->data;
+    out->size = file->size;
 }
-
 
