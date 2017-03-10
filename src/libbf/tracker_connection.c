@@ -29,6 +29,8 @@ static tracker_announce_request_t *create_tracker_request(const void *arg)
         ret->port = targ->port;
         ret->compact = true;
         SET_HAS(ret, REQUEST_HAS_COMPACT);        
+        ret->numwant = 1; //TEMP
+        SET_HAS(ret, REQUEST_HAS_NUMWANT);        
 
         pthread_mutex_lock(&targ->torrent->sh_lock);
 
@@ -105,27 +107,26 @@ static void *periodic_announce(void *arg)
     completed = targ->torrent->sh.completed;
     pthread_mutex_unlock(&targ->torrent->sh_lock);
 
-    tracker_announce_request_t *req = create_tracker_request(arg);
-    tracker_announce_resp_t *resp;
-
-    req->event = TORRENT_EVENT_STARTED;
-    SET_HAS(req, REQUEST_HAS_EVENT);
-    resp = tracker_announce(targ->torrent->announce, req);
-
-    tracker_announce_request_free(req);
-    if(resp)
-        tracker_announce_resp_free(resp);
-
+    bool started = false;
     while(true) {
-        req = create_tracker_request(arg);  
+        tracker_announce_request_t *req = create_tracker_request(arg);
+        tracker_announce_resp_t *resp;
+
+        if(!started){
+            req->event = TORRENT_EVENT_STARTED;
+            SET_HAS(req, REQUEST_HAS_EVENT);
+            started = true;
+        }
 
         pthread_mutex_lock(&targ->torrent->sh_lock);
-        if(completed == false && targ->torrent->sh.completed == true) {
+        bool read_completed = targ->torrent->sh.completed;
+        pthread_mutex_unlock(&targ->torrent->sh_lock);
+
+        if(completed == false && read_completed == true) {
             req->event = TORRENT_EVENT_COMPLETED;
             SET_HAS(req, REQUEST_HAS_EVENT);
         }
-        completed = targ->torrent->sh.completed;
-        pthread_mutex_unlock(&targ->torrent->sh_lock);
+        completed = read_completed;
 
         resp = tracker_announce(targ->torrent->announce, req);
 

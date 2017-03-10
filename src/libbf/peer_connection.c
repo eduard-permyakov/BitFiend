@@ -19,8 +19,9 @@
 
 #include <sys/queue.h>
 
-#define PEER_CONNECT_TIMEOUT_SEC 5
-#define PEER_TIMEOUT_SEC         120
+#define PEER_CONNECT_TIMEOUT_SEC        5
+#define PEER_TIMEOUT_SEC                120
+#define PEER_NUM_OUTSTANDING_REQUESTS   1
 
 typedef struct peer_state {
     bool choked;
@@ -39,6 +40,27 @@ typedef struct {
     queue_t       *peer_requests;
     list_t        *local_requests;
 }conn_state_t;
+
+static conn_state_t *conn_state_init(torrent_t *torrent);
+static void          conn_state_cleanup(void *arg);
+static void          print_ip(peer_t *peer, char *outbuff, size_t n);
+static int           peer_connect(peer_arg_t *arg);
+static void         *peer_connection(void *arg);
+static int           handshake(int sockfd, peer_arg_t *parg, char peer_id[20], char info_hash[20], 
+                               torrent_t **out);
+static void          peer_connection_cleanup(void *arg);
+static mqd_t         peer_queue_open(int flags);
+static void          service_have_events(int sockfd, mqd_t queue, const torrent_t *torrent, 
+                                         unsigned char *havebf);
+static void          service_peer_requests(int sockfd, const conn_state_t *state, const torrent_t *torrent);
+static int           process_queued_msgs(int sockfd, torrent_t *torrent, conn_state_t *state);
+static void          process_msg(int sockfd, peer_msg_t *msg, conn_state_t *state, torrent_t *torrent);
+static void          process_piece_msg(conn_state_t *state, piece_msg_t *msg);
+static void          send_requests(int sockfd, conn_state_t *state, torrent_t *torrent);
+static void          choke(int sockfd, conn_state_t *state, const torrent_t *torrent);
+static void          unchoke(int sockfd, conn_state_t *state, const torrent_t *torrent);
+static void          show_interested(int sockfd, conn_state_t *state, const torrent_t *torrent);
+static void          show_not_interest(int sockfd, conn_state_t *state, const torrent_t *torrent);
 
 static conn_state_t *conn_state_init(torrent_t *torrent)
 {
@@ -300,13 +322,14 @@ static void process_piece_msg(conn_state_t *state, piece_msg_t *msg)
 
             if(curr->blocks_left == 0){
                 /*We've got the entire piece!*/
+                log_printf(LOG_LEVEL_INFO, "Got a piece fam!\n");
             }
 
         }
     }
 }
 
-static void process_msg(peer_msg_t *msg, conn_state_t *state, torrent_t *torrent)
+static void process_msg(int sockfd, peer_msg_t *msg, conn_state_t *state, torrent_t *torrent)
 {
     switch(msg->type){
         case MSG_KEEPALIVE:
@@ -315,6 +338,7 @@ static void process_msg(peer_msg_t *msg, conn_state_t *state, torrent_t *torrent
             state->local.choked = true;
             break;
         case MSG_UNCHOKE:
+            log_printf(LOG_LEVEL_DEBUG, "I'm unchoked\n");
             state->local.choked = false;
             break;
         case MSG_INTERESTED:
@@ -328,6 +352,20 @@ static void process_msg(peer_msg_t *msg, conn_state_t *state, torrent_t *torrent
         case MSG_BITFIELD:
             assert(msg->payload.bitfield->size == LBITFIELD_NUM_BYTES(state->bitlen));
             memcpy(state->peer_have, msg->payload.bitfield->str, LBITFIELD_NUM_BYTES(state->bitlen));    
+
+            assert(state->local.interested == false);
+            pthread_mutex_lock(&torrent->sh_lock);
+            bool interested = false;
+            for(int i = 0; i < list_get_size(torrent->pieces); i++) {
+                if(torrent->sh.piece_states[i] != PIECE_STATE_HAVE && LBITFIELD_ISSET(i, state->peer_have)) {
+                    interested = true;
+                    break;
+                }
+            }
+            if(interested)
+                show_interested(sockfd, state, torrent);
+            pthread_mutex_unlock(&torrent->sh_lock);
+
             break;
         case MSG_REQUEST:
             queue_push(state->peer_requests, &msg->payload.request);
@@ -346,6 +384,113 @@ static void process_msg(peer_msg_t *msg, conn_state_t *state, torrent_t *torrent
         default:
             break;
     }
+}
+
+static int process_queued_msgs(int sockfd, torrent_t *torrent, conn_state_t *state)
+{
+    while(peer_msg_buff_nonempty(sockfd)) {
+
+        pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
+        pthread_testcancel();
+        pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+
+        peer_msg_t msg;
+
+        if(peer_msg_recv(sockfd, &msg, torrent))
+            return -1;
+
+        process_msg(sockfd, &msg, state, torrent);
+        if(msg.type == MSG_BITFIELD)
+            byte_str_free(msg.payload.bitfield);
+    }
+    return 0;
+}
+
+static void service_peer_requests(int sockfd, const conn_state_t *state, const torrent_t *torrent)
+{
+    log_printf(LOG_LEVEL_DEBUG, "Servicing piece requests...\n");
+    request_msg_t request;     
+    while(queue_pop(state->peer_requests, &request) == 0) {
+        peer_msg_t outmsg;        
+        outmsg.type = MSG_PIECE;
+        outmsg.payload.piece.index = request.index;
+        outmsg.payload.piece.blocklen = request.length;
+        outmsg.payload.piece.begin = request.begin;
+        peer_msg_send(sockfd, &outmsg, torrent); 
+    }
+}
+
+static void send_requests(int sockfd, conn_state_t *state, torrent_t *torrent)
+{
+    log_printf(LOG_LEVEL_DEBUG, "Sending requests for pieces...\n");
+    int n = PEER_NUM_OUTSTANDING_REQUESTS - list_get_size(state->local_requests);
+    if(n <= 0)
+        return;
+
+    //TODO: fix selection algorithm & update torrent state that piece is requested
+    for(int i = 0; i < n; i++) {
+        piece_request_t *request = piece_request_create(torrent, i);
+        list_add(state->local_requests, (unsigned char*)&request, sizeof(piece_request_t*));
+
+        const unsigned char *entry;
+        FOREACH_ENTRY(entry, request->block_requests) {
+            block_request_t *br = *(block_request_t**)entry;
+
+            peer_msg_t tosend;
+            tosend.type = MSG_REQUEST;
+            tosend.payload.request.index = request->piece_index;
+            tosend.payload.request.length = br->len;
+            tosend.payload.request.begin = br->begin;
+
+            peer_msg_send(sockfd, &tosend, torrent);
+        }
+    }
+}
+
+static void choke(int sockfd, conn_state_t *state, const torrent_t *torrent)
+{
+    peer_msg_t choke_msg;
+    choke_msg.type = MSG_CHOKE;
+
+    if(peer_msg_send(sockfd, &choke_msg, torrent))
+        return;
+
+    state->remote.choked = true; 
+}
+
+static void unchoke(int sockfd, conn_state_t *state, const torrent_t *torrent)
+{
+    peer_msg_t unchoke_msg;
+    unchoke_msg.type = MSG_UNCHOKE;
+
+    if(peer_msg_send(sockfd, &unchoke_msg, torrent))
+        return;
+
+    state->remote.choked = false;
+    log_printf(LOG_LEVEL_DEBUG, "Unchoked peer\n");
+}
+
+static void show_interested(int sockfd, conn_state_t *state, const torrent_t *torrent)
+{
+    peer_msg_t interested_msg;
+    interested_msg.type = MSG_INTERESTED;
+
+    if(peer_msg_send(sockfd, &interested_msg, torrent))
+        return;
+
+    state->local.interested = true;
+    log_printf(LOG_LEVEL_DEBUG, "Showed interest to the peer\n");
+}
+
+static void show_not_interest(int sockfd, conn_state_t *state, const torrent_t *torrent)
+{
+    peer_msg_t not_interested_msg;
+    not_interested_msg.type = MSG_INTERESTED;
+
+    if(peer_msg_send(sockfd, &not_interested_msg, torrent))
+        return;
+
+    state->local.interested = false;
 }
 
 static void *peer_connection(void *arg)
@@ -393,32 +538,43 @@ static void *peer_connection(void *arg)
         goto fail_init;
     pthread_cleanup_push(conn_state_cleanup, state);{
 
-    peer_msg_t send_msg, recv_msg;
-    send_msg.type = MSG_KEEPALIVE;
+    //unchoke(sockfd, state, torrent);
+    //show_interested(sockfd, state, torrent);
+
+    //send the initial bitfield:
+    peer_msg_t bitmsg;
+    bitmsg.type = MSG_BITFIELD;
+    bitmsg.payload.bitfield = byte_str_new(LBITFIELD_NUM_BYTES(state->bitlen), state->local_have);
+    if(peer_msg_send(sockfd, &bitmsg, torrent)){
+        byte_str_free(bitmsg.payload.bitfield);
+        goto abort_conn;
+    }
+    byte_str_free(bitmsg.payload.bitfield);
 
     while(true) {
 
         pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
-        pthread_testcancel();
+        sleep(1);
         pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
 
         service_have_events(sockfd, queue, torrent, state->local_have);
 
-        while(peer_msg_buff_nonempty(sockfd)) {
+        /* Cancellation point in this func also, will update state based on message contents */
+        if(process_queued_msgs(sockfd, torrent, state))
+            goto abort_conn;
 
-            pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
-            pthread_testcancel();
-            pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
-
-            peer_msg_t msg;
-
-            if(peer_msg_recv(sockfd, &msg, torrent))
-                goto abort_conn;
-            process_msg(&msg, state, torrent);
-            if(msg.type == MSG_BITFIELD)
-                byte_str_free(msg.payload.bitfield);
+        if(state->pieces_recvd > state->pieces_sent) {
+            service_peer_requests(sockfd, state, torrent);
+        }else {
+            if(!state->local.choked && state->local.interested){
+                send_requests(sockfd, state, torrent);
+            }else{
+                /* NO-OP for now... */
+                //peer_msg_t keepalive;
+                //keepalive.type = MSG_KEEPALIVE;
+                //peer_msg_send(sockfd, &keepalive, torrent);
+            }
         }
-
     }
 
 abort_conn: ;
