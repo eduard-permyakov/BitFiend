@@ -142,7 +142,7 @@ static uint32_t msgbuff_len(msg_type_t type, const torrent_t *torrent)
             ret = 1 + 2 * sizeof(uint32_t) + PEER_REQUEST_SIZE;
             break;
         case MSG_BITFIELD:
-            ret = 1 + LBITFIELD_NUM_BYTES(list_get_size(torrent->pieces));
+            ret = 1 + LBITFIELD_NUM_BYTES(dict_get_size(torrent->pieces));
             break;
         case MSG_REQUEST:
             ret = 1 + 3 * sizeof(uint32_t);

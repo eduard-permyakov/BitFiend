@@ -56,7 +56,7 @@ static void          service_peer_requests(int sockfd, const conn_state_t *state
 static int           process_queued_msgs(int sockfd, torrent_t *torrent, conn_state_t *state);
 static void          process_msg(int sockfd, peer_msg_t *msg, conn_state_t *state, torrent_t *torrent);
 static void          process_piece_msg(conn_state_t *state, piece_msg_t *msg);
-static void          send_requests(int sockfd, conn_state_t *state, torrent_t *torrent);
+static int           send_requests(int sockfd, conn_state_t *state, torrent_t *torrent);
 static void          choke(int sockfd, conn_state_t *state, const torrent_t *torrent);
 static void          unchoke(int sockfd, conn_state_t *state, const torrent_t *torrent);
 static void          show_interested(int sockfd, conn_state_t *state, const torrent_t *torrent);
@@ -73,7 +73,7 @@ static conn_state_t *conn_state_init(torrent_t *torrent)
     ret->remote.choked = true;
     ret->remote.interested = false;
 
-    ret->bitlen = list_get_size(torrent->pieces);
+    ret->bitlen = dict_get_size(torrent->pieces);
     unsigned num_bytes = LBITFIELD_NUM_BYTES(ret->bitlen);
 
     ret->peer_have = malloc(num_bytes);
@@ -356,7 +356,7 @@ static void process_msg(int sockfd, peer_msg_t *msg, conn_state_t *state, torren
             assert(state->local.interested == false);
             pthread_mutex_lock(&torrent->sh_lock);
             bool interested = false;
-            for(int i = 0; i < list_get_size(torrent->pieces); i++) {
+            for(int i = 0; i < dict_get_size(torrent->pieces); i++) {
                 if(torrent->sh.piece_states[i] != PIECE_STATE_HAVE && LBITFIELD_ISSET(i, state->peer_have)) {
                     interested = true;
                     break;
@@ -420,12 +420,12 @@ static void service_peer_requests(int sockfd, const conn_state_t *state, const t
     }
 }
 
-static void send_requests(int sockfd, conn_state_t *state, torrent_t *torrent)
+static int send_requests(int sockfd, conn_state_t *state, torrent_t *torrent)
 {
     log_printf(LOG_LEVEL_DEBUG, "Sending requests for pieces...\n");
     int n = PEER_NUM_OUTSTANDING_REQUESTS - list_get_size(state->local_requests);
     if(n <= 0)
-        return;
+        return 0;
 
     //TODO: fix selection algorithm & update torrent state that piece is requested
     for(int i = 0; i < n; i++) {
@@ -442,9 +442,11 @@ static void send_requests(int sockfd, conn_state_t *state, torrent_t *torrent)
             tosend.payload.request.length = br->len;
             tosend.payload.request.begin = br->begin;
 
-            peer_msg_send(sockfd, &tosend, torrent);
+            if(peer_msg_send(sockfd, &tosend, torrent))
+                return -1;
         }
     }
+    return 0;
 }
 
 static void choke(int sockfd, conn_state_t *state, const torrent_t *torrent)
@@ -567,7 +569,8 @@ static void *peer_connection(void *arg)
             service_peer_requests(sockfd, state, torrent);
         }else {
             if(!state->local.choked && state->local.interested){
-                send_requests(sockfd, state, torrent);
+                if(send_requests(sockfd, state, torrent))
+                    goto abort_conn;
             }else{
                 /* NO-OP for now... */
                 //peer_msg_t keepalive;

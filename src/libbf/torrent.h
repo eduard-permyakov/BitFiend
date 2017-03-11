@@ -21,7 +21,7 @@ typedef enum {
 }piece_state_t;
 
 typedef struct torrent {
-    list_t             *pieces;
+    dict_t             *pieces;
     unsigned            piece_len;
     list_t             *files;
     char                info_hash[20];

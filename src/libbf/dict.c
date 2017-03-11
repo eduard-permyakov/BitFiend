@@ -4,6 +4,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h> 
+#include <limits.h>
+#include <assert.h>
 
 #define FOREACH_ENTRY_IN_BIN(_entry, _dict_ptr, _bin) \
     for(dict_entry_t *_entry = _dict_ptr->bins[_bin]; _entry; _entry = _entry->next)
@@ -38,6 +40,7 @@ typedef struct dict_entry{
 
 struct dict{
     unsigned size;
+    unsigned binsize;
     dict_entry_t **bins;
 };
 
@@ -68,7 +71,7 @@ static void dict_entry_free(dict_entry_t *entry)
 
 // DICT ENTRY END
 
-static unsigned hashf(size_t size, const char *key)
+static unsigned hashf(size_t binsize, const char *key)
 {
     long sum = 0;
     const char *cursor = key;
@@ -83,15 +86,16 @@ static unsigned hashf(size_t size, const char *key)
         cursor += len;
     }
     
-    return abs(sum) % size;
+    return abs(sum) % binsize;
 }
 
-dict_t *dict_init(size_t size)
+dict_t *dict_init(size_t binsize)
 {
     dict_t *ret = malloc(sizeof(dict_t));
     if(ret) {
-        ret->size = size;
-        ret->bins = calloc(size, sizeof(dict_entry_t*));
+        ret->size = 0;
+        ret->binsize = binsize;
+        ret->bins = calloc(binsize, sizeof(dict_entry_t*));
         if(!ret->bins) {
             free(ret);
             ret = NULL; 
@@ -102,7 +106,7 @@ dict_t *dict_init(size_t size)
 
 void dict_free(dict_t *dict)
 {
-    for(unsigned i = 0; i < dict->size; i++){
+    for(unsigned i = 0; i < dict->binsize; i++){
         FOREACH_ENTRY_AND_PREV_IN_BIN(entry, prev, dict, i) {
             if(prev){
                 dict_entry_free(prev);
@@ -119,7 +123,7 @@ void dict_free(dict_t *dict)
 
 int dict_add(dict_t *dict, const char *key, unsigned char *data, size_t size)
 {
-    unsigned hash = hashf(dict->size, key);
+    unsigned hash = hashf(dict->binsize, key);
     dict_entry_t *entry = dict_entry_init(key, data, size);
 
     if(!entry)
@@ -135,12 +139,13 @@ int dict_add(dict_t *dict, const char *key, unsigned char *data, size_t size)
         SET_TO_LAST_ENTRY(curr, dict, hash);
         curr->next = entry;
     }
+    dict->size++;
     return 0;
 }
 
 unsigned char *dict_get(dict_t *dict, const char *key)
 {
-    unsigned hash = hashf(dict->size, key);
+    unsigned hash = hashf(dict->binsize, key);
     FOREACH_ENTRY_IN_BIN(entry, dict, hash) {
         if(!strcmp(entry->key, key))
             return entry->value;
@@ -150,7 +155,7 @@ unsigned char *dict_get(dict_t *dict, const char *key)
 
 void *dict_remove(dict_t *dict, const char *key)
 {
-    unsigned hash = hashf(dict->size, key);
+    unsigned hash = hashf(dict->binsize, key);
     FOREACH_ENTRY_AND_PREV_IN_BIN(entry, prev, dict, hash) {
         if(!strcmp(entry->key, key)) {
             if(prev)
@@ -161,6 +166,7 @@ void *dict_remove(dict_t *dict, const char *key)
                 dict->bins[hash] = NULL;
 
             dict_entry_free(entry);
+            dict->size--;
         }
     }
 }
@@ -170,7 +176,7 @@ void dict_rehash(dict_t *dict, size_t newsize)
     dict_entry_t **newbins;    
     newbins = calloc(newsize, sizeof(dict_entry_t*));
 
-    for(unsigned i = 0; i < dict->size; i++) {
+    for(unsigned i = 0; i < dict->binsize; i++) {
         FOREACH_ENTRY_AND_PREV_IN_BIN(entry, prev, dict, i) {
             if(prev)
                 prev->next = NULL; /*This node at the end of a new bin*/
@@ -189,14 +195,18 @@ void dict_rehash(dict_t *dict, size_t newsize)
     }
 
     free(dict->bins);
-    dict->size = newsize;
+    dict->binsize = newsize;
     dict->bins = newbins;
 }
 
+unsigned dict_get_size(dict_t *dict)
+{
+    return dict->size;
+}
 
 const dict_iter_t *dict_iter_first(const dict_t *dict)
 {
-    for(unsigned i = 0; i < dict->size; i++) {
+    for(unsigned i = 0; i < dict->binsize; i++) {
         FOREACH_ENTRY_IN_BIN(entry, dict, i) {
             return &entry->iter;
         }
@@ -209,9 +219,9 @@ const dict_iter_t *dict_iter_next(dict_t *dict, const dict_iter_t *iter)
     if(iter->next)
         return &(iter->next->iter);
     
-    unsigned hash = hashf(dict->size, dict_iter_get_key(iter));
+    unsigned hash = hashf(dict->binsize, dict_iter_get_key(iter));
 
-    for(unsigned i = hash + 1; i < dict->size; i++) {
+    for(unsigned i = hash + 1; i < dict->binsize; i++) {
         FOREACH_ENTRY_IN_BIN(entry, dict, i) {
             return &entry->iter;
         }
@@ -233,9 +243,22 @@ const char *dict_iter_get_key(const dict_iter_t *iter)
     return ret;
 }
 
+void dict_key_for_uint32(uint32_t key, char *out, size_t len)
+{
+    char base = 'a';
+    size_t num_nybbles = sizeof(uint32_t) * CHAR_BIT / 4;
+    assert(len >= num_nybbles + 1);
+    int i;
+    for(i = 0; i < num_nybbles; i++) {
+        out[i] = base + ((key >> (i*4)) & 0xF);
+        assert(out[i] >= 'a' && out[i] < ('a' + 16));
+    }
+    out[i] = '\0';
+}
+
 void *dict_dump(dict_t *dict)
 {
-    for(unsigned i = 0; i < dict->size; i++) {
+    for(unsigned i = 0; i < dict->binsize; i++) {
         printf("%4d: ", i);
         FOREACH_ENTRY_IN_BIN(entry, dict, i) {
             printf("[%s]", entry->key);
