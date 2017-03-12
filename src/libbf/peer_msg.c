@@ -159,6 +159,10 @@ static uint32_t msgbuff_len(msg_type_t type, const torrent_t *torrent)
 
 static inline bool valid_len(msg_type_t type, const torrent_t *torrent, uint32_t len)
 {
+    if(type == MSG_PIECE)
+        return (len >= (1 + 2 * sizeof(uint32_t) + 1)) && 
+               (len <= (1 + 2 * sizeof(uint32_t) + PEER_REQUEST_SIZE));
+        
     return (len == msgbuff_len(type, torrent));
 }
 
@@ -431,7 +435,6 @@ int peer_msg_send(int sockfd, peer_msg_t *msg, const torrent_t *torrent)
 int peer_msg_recv(int sockfd, peer_msg_t *out, const torrent_t *torrent)
 {
     uint32_t len;
-    log_printf(LOG_LEVEL_DEBUG, "Receiving len of message\n");
     if(peer_recv_buff(sockfd, (char*)&len, sizeof(uint32_t)))
         return -1;
     len = ntohl(len);

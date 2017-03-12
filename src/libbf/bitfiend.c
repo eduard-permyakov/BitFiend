@@ -106,7 +106,7 @@ int bitfiend_shutdown(void)
 
     if(pthread_cancel(s_peer_listener))
         ret = BITFIEND_FAILURE;
-
+    
     pthread_join(s_peer_listener, &tret);
     assert(tret == PTHREAD_CANCELED);
 

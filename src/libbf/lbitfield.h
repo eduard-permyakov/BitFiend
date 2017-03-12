@@ -13,16 +13,16 @@
  */
 
 #define LBITFIELD_NUM_BYTES(_len) (((_len)/CHAR_BIT) + ((_len) % CHAR_BIT ? 1 : 0))
-#define LBITFIELD_ISSET(_index, _buff) !!((_buff)[(_index)/CHAR_BIT] & (CHAR_BIT-((_index) % CHAR_BIT)))
+#define LBITFIELD_ISSET(_index, _buff) !!((_buff)[(_index)/CHAR_BIT] & (1 << (CHAR_BIT-((_index) % CHAR_BIT)-1)))
 
 #define LBITFIELD_SET(_index, _buff) \
     do { \
-        ((_buff)[(_index)/CHAR_BIT] |= (CHAR_BIT-((_index) % CHAR_BIT))); \
+        ((_buff)[(_index)/CHAR_BIT] |= (1 << (CHAR_BIT-((_index) % CHAR_BIT)-1))); \
     }while(0)
 
 #define LBITFIELD_CLR(_index, _buff) \
     do { \
-        ((_buff)[(_index)/CHAR_BIT] &= ~(CHAR_BIT-((_index) % CHAR_BIT))); \
+        ((_buff)[(_index)/CHAR_BIT] &= ~(1 << (CHAR_BIT-((_index) % CHAR_BIT)-1))); \
     }while(0)   
 
 #endif

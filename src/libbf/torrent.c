@@ -29,13 +29,12 @@ static dict_t *create_piece_dict(byte_str_t *raw)
     if(!ret)
         goto fail_alloc_dict;
 
-    assert(raw->size % 20 == 0);
     for(uint32_t i = 0; i < raw->size; i += 20) {
         byte_str_t *entry = byte_str_new(20, raw->str + i);
         if(!entry)
             goto fail_alloc_str;
         char key[9];
-        dict_key_for_uint32(i, key, sizeof(key));
+        dict_key_for_uint32((i/20), key, sizeof(key));
         dict_add(ret, key, (unsigned char*)&entry, sizeof(byte_str_t*));
     }
 
@@ -233,6 +232,7 @@ torrent_t *torrent_init(bencode_obj_t *meta, const char *destdir)
     ret->sh.peer_connections = list_init();
     ret->sh.piece_states = malloc(dict_get_size(ret->pieces));
     memset(ret->sh.piece_states, PIECE_STATE_NOT_REQUESTED, dict_get_size(ret->pieces));
+    ret->sh.pieces_left = dict_get_size(ret->pieces);
     ret->sh.priority = DEFAULT_PRIORITY;
     ret->sh.state = TORRENT_STATE_LEECHING;
     ret->sh.progress = 0.0f;
@@ -312,9 +312,9 @@ bool torrent_sha1_verify(const torrent_t *torrent, unsigned index)
     assert(index < dict_get_size(torrent->pieces));
 
     char key[9];
-    dict_key_for_uint32(index, key, sizeof(key));
+    dict_key_for_uint32((uint32_t)index, key, sizeof(key));
     byte_str_t *piece_hash = *(byte_str_t**)dict_get(torrent->pieces, key);
-
+        
     piece_request_t *pr = piece_request_create(torrent, index);        
     sha1_context_t *ctx = sha1_context_init();
 
@@ -335,6 +335,47 @@ bool torrent_sha1_verify(const torrent_t *torrent, unsigned index)
     sha1_context_free(ctx);
     piece_request_free(pr);
     return (memcmp(piece_hash->str, sha1_digest, DIGEST_LEN) == 0);
+}
+
+/* TODO: Eventually add keeping of piece frequency in the torrent and change piece selection to 
+ * use rarest first algorithm. Also add more fine-grained locking for piece states */
+int torrent_next_request(torrent_t *torrent, unsigned char *peer_have_bf, unsigned *out)
+{
+    unsigned nr, r;
+    bool has_nr = false, has_r = false;
+    unsigned ret;
+
+    pthread_mutex_lock(&torrent->sh_lock); 
+    for(int i = 0; i < dict_get_size(torrent->pieces); i++){
+
+        if(torrent->sh.piece_states[i] == PIECE_STATE_REQUESTED && 
+           LBITFIELD_ISSET(i, peer_have_bf)) {
+            r = i;
+            has_r = true;
+        }
+
+        if(torrent->sh.piece_states[i] == PIECE_STATE_NOT_REQUESTED &&
+           LBITFIELD_ISSET(i, peer_have_bf)) {
+            nr = i;
+            has_nr = true;
+            break;
+        }
+    }
+
+    if(!has_nr && !has_r){
+        pthread_mutex_unlock(&torrent->sh_lock); 
+        return -1;
+    }
+
+    ret = has_nr ? nr : r;
+    torrent->sh.piece_states[ret] = PIECE_STATE_REQUESTED;
+
+    pthread_mutex_unlock(&torrent->sh_lock); 
+
+    log_printf(LOG_LEVEL_INFO, "Requesting piece: %u\n", has_nr ? nr : r);
+
+    *out = ret; 
+    return 0;
 }
 
 //temp

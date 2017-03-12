@@ -29,7 +29,7 @@ static tracker_announce_request_t *create_tracker_request(const void *arg)
         ret->port = targ->port;
         ret->compact = true;
         SET_HAS(ret, REQUEST_HAS_COMPACT);        
-        ret->numwant = 1; //TEMP
+        ret->numwant = 50; 
         SET_HAS(ret, REQUEST_HAS_NUMWANT);        
 
         pthread_mutex_lock(&targ->torrent->sh_lock);
