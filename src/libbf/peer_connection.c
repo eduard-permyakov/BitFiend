@@ -55,7 +55,7 @@ static void          service_have_events(int sockfd, mqd_t queue, const torrent_
 static void          service_peer_requests(int sockfd, const conn_state_t *state, const torrent_t *torrent);
 static int           process_queued_msgs(int sockfd, torrent_t *torrent, conn_state_t *state);
 static void          process_msg(int sockfd, peer_msg_t *msg, conn_state_t *state, torrent_t *torrent);
-static void          process_piece_msg(conn_state_t *state, piece_msg_t *msg);
+static void          process_piece_msg(conn_state_t *state, piece_msg_t *msg, const torrent_t *torrent);
 static int           send_requests(int sockfd, conn_state_t *state, torrent_t *torrent);
 static void          choke(int sockfd, conn_state_t *state, const torrent_t *torrent);
 static void          unchoke(int sockfd, conn_state_t *state, const torrent_t *torrent);
@@ -297,7 +297,7 @@ static void service_have_events(int sockfd, mqd_t queue, const torrent_t *torren
     }
 }
 
-static void process_piece_msg(conn_state_t *state, piece_msg_t *msg)
+static void process_piece_msg(conn_state_t *state, piece_msg_t *msg, const torrent_t *torrent)
 {
     /* The block got written to the underlying file(s) already from tcp buffer by the recv routine.
      * Here we check if we've gotten a complete piece so far, verify it by the SHA1 hash if so,
@@ -323,6 +323,7 @@ static void process_piece_msg(conn_state_t *state, piece_msg_t *msg)
             if(curr->blocks_left == 0){
                 /*We've got the entire piece!*/
                 log_printf(LOG_LEVEL_INFO, "Got a piece fam!\n");
+                bool valid = torrent_sha1_verify(torrent, curr->piece_index);
             }
 
         }
@@ -372,7 +373,7 @@ static void process_msg(int sockfd, peer_msg_t *msg, conn_state_t *state, torren
             break; 
         case MSG_PIECE:
         {
-            process_piece_msg(state, &msg->payload.piece);
+            process_piece_msg(state, &msg->payload.piece, torrent);
             break;
         }
         case MSG_CANCEL:

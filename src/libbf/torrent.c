@@ -5,6 +5,7 @@
 #include "peer_connection.h"
 #include "lbitfield.h"
 #include "piece_request.h"
+#include "sha1.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -24,7 +25,6 @@ static int     populate_from_info_dic(torrent_t *torrent, dict_t *info, const ch
 static dict_t *create_piece_dict(byte_str_t *raw)
 {
     assert(raw->size % 20 == 0);
-    printf("size: %zu\n", raw->size / 20);
     dict_t *ret = dict_init(raw->size / 20);
     if(!ret)
         goto fail_alloc_dict;
@@ -314,14 +314,27 @@ bool torrent_sha1_verify(const torrent_t *torrent, unsigned index)
     char key[9];
     dict_key_for_uint32(index, key, sizeof(key));
     byte_str_t *piece_hash = *(byte_str_t**)dict_get(torrent->pieces, key);
-    printf("SHA1 of piece %u:\n", index);
-    for(int i = 0; i < 20; i++ ){
-        printf("%02X", (unsigned char)piece_hash->str[i]);
-    }
-    printf("\n");
 
     piece_request_t *pr = piece_request_create(torrent, index);        
-    //TODO: need sha1 update, compute hash from potentially many diff files
+    sha1_context_t *ctx = sha1_context_init();
+
+    const unsigned char *entry;
+    FOREACH_ENTRY(entry, pr->block_requests){
+        block_request_t *br = *(block_request_t**)entry;
+
+        const unsigned char *mementry;
+        FOREACH_ENTRY(mementry, br->filemems){
+            filemem_t fmem = *(filemem_t*)mementry;
+
+            sha1_update(ctx, fmem.mem, fmem.size);
+        }
+    }
+    unsigned char sha1_digest[DIGEST_LEN];
+    sha1_finish(ctx, sha1_digest);
+
+    sha1_context_free(ctx);
+    piece_request_free(pr);
+    return (memcmp(piece_hash->str, sha1_digest, DIGEST_LEN) == 0);
 }
 
 //temp
