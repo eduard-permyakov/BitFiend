@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <signal.h>
+#include <errno.h>
 
 static pthread_t         s_peer_listener;
 static const uint16_t    s_port = 6889; 
@@ -110,21 +111,39 @@ int bitfiend_shutdown(void)
     pthread_join(s_peer_listener, &tret);
     assert(tret == PTHREAD_CANCELED);
 
+    size_t listsize;
     pthread_mutex_lock(&s_unassoc_peerthreads_lock);
+    listsize = list_get_size(s_unassoc_peerthreads);
+    pthread_mutex_unlock(&s_unassoc_peerthreads_lock);
+    log_printf(LOG_LEVEL_DEBUG, "Cancelling and joining unassociated peer threads. There are %zu\n",
+        listsize);
 
-    log_printf(LOG_LEVEL_DEBUG, "Cancelling and joining unassociated peer threads. There are %d\n",
-        list_get_size(s_unassoc_peerthreads));
+    const list_iter_t *iter = NULL;
+    pthread_t curr;
+    do {
+        /* Remove one entry at a time from the list head. This is so we are not holding the 
+         * list lock while we are joining the thread in the list, since the thread being 
+         * joined can also hold the lock and remove an entry from the list  */
+        pthread_mutex_lock(&s_unassoc_peerthreads_lock);
+        iter = list_iter_first(s_unassoc_peerthreads);
+        if(iter){
+            curr = *(pthread_t*)list_iter_get_value(iter);
+            list_remove(s_unassoc_peerthreads, (unsigned char*)&curr);
+        }
+        pthread_mutex_unlock(&s_unassoc_peerthreads_lock);
 
-    FOREACH_ENTRY(entry, s_unassoc_peerthreads) {
-        pthread_t thread = *(pthread_t*)entry;
+        if(iter){
+            pthread_cancel(curr);
+            pthread_join(curr, NULL);
 
-        pthread_cancel(thread);
-        pthread_join(thread, NULL);
+            char queue_name[64];
+            peer_connection_queue_name(curr, queue_name, sizeof(queue_name));
+            mq_unlink(queue_name);
+        }
 
-        char queue_name[64];
-        peer_connection_queue_name(thread, queue_name, sizeof(queue_name));
-        mq_unlink(queue_name);
-    }
+    }while(iter);
+
+    pthread_mutex_lock(&s_unassoc_peerthreads_lock);
     list_free(s_unassoc_peerthreads);
     pthread_mutex_unlock(&s_unassoc_peerthreads_lock);
 
@@ -207,15 +226,21 @@ torrent_t *bitfiend_assoc_peer(peer_conn_t *peer, char infohash[20])
 
         if(!memcmp(torrent->info_hash, infohash, sizeof(torrent->info_hash))) {
 
+            pthread_mutex_lock(&s_unassoc_peerthreads_lock);
+            /* Handle the case if we've already been "chosen" to be joined by the main thread */
+            if(!list_contains(s_unassoc_peerthreads, (unsigned char*)&peer->thread)){
+                pthread_mutex_unlock(&s_unassoc_peerthreads_lock);
+                break;
+            }
+            list_remove(s_unassoc_peerthreads, (unsigned char*)&peer->thread);
+            pthread_mutex_unlock(&s_unassoc_peerthreads_lock);
+
             pthread_mutex_lock(&torrent->sh_lock);
-            log_printf(LOG_LEVEL_INFO, "Associated incoming peer connection with torrent\n");
             list_add(torrent->sh.peer_connections, (unsigned char*)&peer, sizeof(peer_conn_t*));
             ret = torrent;
             pthread_mutex_unlock(&torrent->sh_lock);
 
-            pthread_mutex_lock(&s_unassoc_peerthreads_lock);
-            list_remove(s_unassoc_peerthreads, (unsigned char*)&peer->thread);
-            pthread_mutex_unlock(&s_unassoc_peerthreads_lock);
+            log_printf(LOG_LEVEL_INFO, "Associated incoming peer connection with torrent\n");
 
             break;
         }
@@ -242,15 +267,15 @@ int bitfiend_notify_peers_have(torrent_t *torrent, unsigned have_index)
     FOREACH_ENTRY(entry, torrent->sh.peer_connections) {
         peer_conn_t *conn = *(peer_conn_t**)entry;
 
-        if(conn->thread == pthread_self())
+        if(pthread_equal(conn->thread, pthread_self()) == 0)
             continue;
         
         char queue_name[64];
         peer_connection_queue_name(conn->thread, queue_name, sizeof(queue_name));
         mqd_t queue = mq_open(queue_name, O_WRONLY | O_NONBLOCK);
         if(queue != (mqd_t)-1) {
-            if(mq_send(queue, (char*)&have_index, sizeof(unsigned), 0)) {
-               log_printf(LOG_LEVEL_ERROR, "Failed to send have event to peer threads\n"); 
+            if(mq_send(queue, (char*)&have_index, sizeof(unsigned), 0) && errno != EAGAIN) {
+                log_printf(LOG_LEVEL_ERROR, "Failed to send have event to peer threads\n"); 
             }
             mq_close(queue);
         }else{

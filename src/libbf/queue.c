@@ -107,3 +107,8 @@ int queue_pop(queue_t *queue, void *out)
     return 0;
 }
 
+size_t queue_get_size(queue_t *queue)
+{
+    return queue->size;
+}
+
