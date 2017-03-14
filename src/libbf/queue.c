@@ -1,7 +1,9 @@
 #include "queue.h"
+#include "log.h"
 
 #include <string.h>
 #include <stdlib.h>
+#include <assert.h>
 
 #define QUEUE_BYTES(q) ((q)->entry_size * (q)->capacity)
 
@@ -14,13 +16,20 @@ struct queue {
     char *mem;
 };
 
-static int queue_resize(queue_t *queue, int new_cap)
+static int queue_resize(queue_t *queue, unsigned new_cap)
 {
     void *ret;
-    if(ret = realloc(queue->mem, queue->entry_size * new_cap))
+    ptrdiff_t offhead, offtail;
+    offhead = queue->head - queue->mem;
+    offtail = queue->tail - queue->mem;
+
+    if(ret = realloc(queue->mem, queue->entry_size * new_cap)){
         queue->mem = ret;
-    else
+        queue->head = queue->mem + offhead;
+        queue->tail = queue->mem + offtail;
+    }else{
         return -1;
+    }
     queue->capacity = new_cap;
 
     if(queue->head > queue->tail){
@@ -39,11 +48,18 @@ static int queue_resize(queue_t *queue, int new_cap)
         /* | new |               */
         /*                       */
 
+        assert(queue->tail >= queue->mem);
+        assert(queue->head >= queue->mem);
         ptrdiff_t top = queue->tail + queue->entry_size - queue->mem;
         ptrdiff_t bot = queue->mem + QUEUE_BYTES(queue) - queue->head;
 
-        memmove(queue->mem + bot, queue->mem, top);
+        char tmp[top];
+        memcpy(tmp, queue->mem, top);
         memmove(queue->mem, queue->head, bot);
+        memcpy(queue->mem + bot, tmp, top);
+
+        queue->head = queue->mem;
+        queue->tail = queue->mem + bot;
     }
 
     return 0;
@@ -61,7 +77,7 @@ queue_t *queue_init(size_t entry_size, int init_capacity)
         ret->entry_size = entry_size;
         ret->capacity = init_capacity;
         ret->head = ret->mem;
-        ret->tail = ret->mem;
+        ret->tail = ret->mem - entry_size;
         ret->size = 0;
     }
     return ret;
@@ -80,13 +96,13 @@ int queue_push(queue_t *queue, void *entry)
             return -1;
     }
 
-    if(queue->size > 0)
-        queue->tail += queue->entry_size;
+    queue->tail += queue->entry_size;
     /* Wrap around back to top */
-    if(queue->tail > queue->mem + QUEUE_BYTES(queue)) {
+    if(queue->tail >= queue->mem + QUEUE_BYTES(queue)) {
         queue->tail = queue->mem;    
     }
 
+    assert(queue->tail >= queue->mem && queue->tail < queue->mem + QUEUE_BYTES(queue));
     memcpy(queue->tail, entry, queue->entry_size);
     queue->size++;
     return 0;
@@ -97,10 +113,11 @@ int queue_pop(queue_t *queue, void *out)
     if(queue->size == 0)
         return -1;
 
+    assert(queue->head>= queue->mem && queue->head < queue->mem + QUEUE_BYTES(queue));
     memcpy(out, queue->head, queue->entry_size);
     queue->head += queue->entry_size;
     /*Wrap around back to top */
-    if(queue->head > queue->mem + QUEUE_BYTES(queue)) {
+    if(queue->head >= queue->mem + QUEUE_BYTES(queue)) {
         queue->head = queue->mem;
     }
     queue->size--;

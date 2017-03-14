@@ -261,7 +261,7 @@ static int peer_msg_recv_pastlen(int sockfd, peer_msg_t *out, const torrent_t *t
             if(peer_recv_buff(sockfd, buff, left))
                 return -1;
 
-            assert(sizeof(buff) ==  4 * sizeof(uint32_t));
+            assert(left ==  3 * sizeof(uint32_t));
             uint32_t u32;  
             memcpy(&u32, buff, sizeof(uint32_t));
             out->payload.request.index= ntohl(u32);
@@ -308,10 +308,18 @@ static int peer_msg_recv_pastlen(int sockfd, peer_msg_t *out, const torrent_t *t
 
 static int peer_msg_send_piece(int sockfd, piece_msg_t *pmsg, const torrent_t *torrent)
 {
-    log_printf(LOG_LEVEL_DEBUG, "*** peer_msg_send_piece ***\n");
+    log_printf(LOG_LEVEL_DEBUG, "*** peer_msg_send_piece [index: %u] ***\n", pmsg->index);
     piece_request_t *pr = piece_request_create(torrent, pmsg->index);
     if(!pr)
         return -1;
+
+    uint32_t send_index = htonl(pmsg->index);
+    if(peer_send_buff(sockfd, (char*)&send_index, sizeof(uint32_t)))
+        goto fail_send_piece;
+
+    uint32_t send_offset = htonl(pmsg->begin);
+    if(peer_send_buff(sockfd, (char*)&send_offset, sizeof(uint32_t)))
+        goto fail_send_piece;
 
     size_t written = 0;
     off_t offset = 0;
@@ -325,10 +333,11 @@ static int peer_msg_send_piece(int sockfd, piece_msg_t *pmsg, const torrent_t *t
             filemem_t mem = *(filemem_t*)fmem;
             
             if(offset + mem.size > pmsg->begin) {
-                size_t membegin = (offset < pmsg->begin) ? pmsg->begin - offset : 0;
+                size_t membegin = (offset > pmsg->begin) ? 0 : offset - pmsg->begin;
                 size_t memlen = MIN(mem.size - membegin, pmsg->blocklen - written); 
 
-                log_printf(LOG_LEVEL_DEBUG, "Sending %zu bytes from %p\n", memlen, ((char*)mem.mem) + membegin);
+                log_printf(LOG_LEVEL_DEBUG, "Sending %zu bytes from %p [offset: %u, begin: %u]\n", 
+                    memlen, ((char*)mem.mem) + membegin, offset, pmsg->begin);
                 if(peer_send_buff(sockfd, ((char*)mem.mem) + membegin, memlen))
                     goto fail_send_piece;
 
@@ -336,11 +345,13 @@ static int peer_msg_send_piece(int sockfd, piece_msg_t *pmsg, const torrent_t *t
             }
 
             if(written == pmsg->blocklen)
-                break;
+                goto done;
 
             offset += mem.size;
         }
     }
+
+done:
     piece_request_free(pr);
     return 0;
 
@@ -481,7 +492,8 @@ bool peer_msg_buff_nonempty(int sockfd)
     len = ntohl(len);
 
     int bytes_avail;
-    ioctl(sockfd, FIONREAD, &bytes_avail);
+    if(ioctl(sockfd, FIONREAD, &bytes_avail))
+        return false;
     
     if((unsigned)bytes_avail >= len + sizeof(uint16_t))
         return true;    
