@@ -1,4 +1,4 @@
-#include "bitfiend.h"
+#include <bitfiend.h>
 
 #include <signal.h>
 #include <stdbool.h>
@@ -15,9 +15,10 @@ int main(int argc, char **argv)
     signal(SIGPIPE, SIG_IGN);
 
     bitfiend_init();
-    //bitfiend_add_torrent("/home/eduard/Downloads/ubuntu-16.04.2-desktop-amd64.iso.torrent", 
-    //    "/home/eduard/Desktop");
-    bitfiend_add_torrent("/home/eduard/Downloads/ACADEMIC3.torrent", "/home/eduard/Desktop");
+
+    bitfiend_add_torrent("/home/eduard/Downloads/ubuntu-16.04.2-desktop-amd64.iso.torrent", 
+        "/home/eduard/Desktop");
+    //bitfiend_add_torrent("/home/eduard/Downloads/TEST1.torrent", "/home/eduard/Desktop");
 
     signal(SIGINT, sig_handler);
     while(running)
