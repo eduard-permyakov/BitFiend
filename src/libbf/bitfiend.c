@@ -7,6 +7,7 @@
 #include "torrent_file.h"
 #include "log.h" 
 #include "peer_connection.h"
+#include "thread_reaper.h"
 
 #include <string.h>
 #include <pthread.h>
@@ -19,6 +20,7 @@
 #include <errno.h>
 
 static pthread_t         s_peer_listener;
+static pthread_t         s_reaper;
 static const uint16_t    s_port = 6889; 
 static pthread_mutex_t   s_torrents_lock = PTHREAD_MUTEX_INITIALIZER;
 static list_t           *s_torrents; 
@@ -41,12 +43,25 @@ int bitfiend_init(void)
     s_unassoc_peerthreads = list_init();
 
     if(peer_listener_create(&s_peer_listener, &s_port))
-        goto fail_start_listener;
+        goto fail_init;
+
+    reaper_arg_t *arg = malloc(sizeof(reaper_arg_t));    
+    if(!arg)
+        goto fail_init;
+    arg->reap_interval = 5;
+    arg->torrents = s_torrents;
+    arg->torrents_lock = &s_torrents_lock;
+    arg->unassoc_peers = s_unassoc_peerthreads;
+    arg->unassoc_peer_lock = &s_unassoc_peerthreads_lock;
+    if(thread_reaper_create(&s_reaper, arg)){
+        free(arg);
+        goto fail_init;
+    }
     
     log_printf(LOG_LEVEL_INFO, "BitFiend init successful\n");
     return BITFIEND_SUCCESS;
 
-fail_start_listener:
+fail_init:
     log_printf(LOG_LEVEL_ERROR, "BitFiend init error\n");
     return BITFIEND_FAILURE;
 }
@@ -67,10 +82,6 @@ static int shutdown_torrent(torrent_t *torrent)
     while(iter){
         peer_conn_t *conn = *(peer_conn_t**)(list_iter_get_value(iter));
         void *ret;
-
-        char queue_name[64];
-        peer_connection_queue_name(conn->thread, queue_name, sizeof(queue_name));
-        mq_unlink(queue_name);
 
         pthread_cancel(conn->thread);
         /* Interrupt any blocking call the peer thread may be waiting on 
@@ -105,9 +116,13 @@ int bitfiend_shutdown(void)
      * threads can be spawned which can touch the torrent. Join the torrent's peers last.
      */
 
+    if(pthread_cancel(s_reaper))
+        ret = BITFIEND_FAILURE;
+    pthread_join(s_reaper, &tret);
+    assert(tret == PTHREAD_CANCELED);
+
     if(pthread_cancel(s_peer_listener))
         ret = BITFIEND_FAILURE;
-    
     pthread_join(s_peer_listener, &tret);
     assert(tret == PTHREAD_CANCELED);
 
@@ -135,10 +150,6 @@ int bitfiend_shutdown(void)
         if(iter){
             pthread_cancel(curr);
             pthread_join(curr, NULL);
-
-            char queue_name[64];
-            peer_connection_queue_name(curr, queue_name, sizeof(queue_name));
-            mq_unlink(queue_name);
         }
 
     }while(iter);
@@ -225,6 +236,15 @@ torrent_t *bitfiend_assoc_peer(peer_conn_t *peer, char infohash[20])
         torrent_t *torrent = *(torrent_t**)entry;
 
         if(!memcmp(torrent->info_hash, infohash, sizeof(torrent->info_hash))) {
+
+            pthread_mutex_lock(&torrent->sh_lock);
+            unsigned num_conns = list_get_size(torrent->sh.peer_connections);
+            if(num_conns == torrent->max_peers){
+                pthread_mutex_unlock(&torrent->sh_lock);
+                ret = NULL;
+                break;
+            }
+            pthread_mutex_unlock(&torrent->sh_lock);
 
             pthread_mutex_lock(&s_unassoc_peerthreads_lock);
             /* Handle the case if we've already been "chosen" to be joined by the main thread */

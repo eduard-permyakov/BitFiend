@@ -282,11 +282,23 @@ static mqd_t peer_queue_open(int flags)
     if(ret != (mqd_t)-1)
         log_printf(LOG_LEVEL_INFO, "Successfully opened message queue from receiver thread: %s\n", queue_name);
     else{
-        log_printf(LOG_LEVEL_DEBUG, "Failed to open queue in receiver thread: %s\n", queue_name);
+        log_printf(LOG_LEVEL_WARNING, "Failed to open queue in receiver thread: %s\n", queue_name);
         perror("mq_open");
     }
 
     return ret;
+}
+
+static void queue_cleanup(void *arg)
+{
+    char queue_name[64];
+    peer_connection_queue_name(pthread_self(), queue_name, sizeof(queue_name));
+    if(mq_unlink(queue_name)) {
+        log_printf(LOG_LEVEL_ERROR, "Failed to close queue: %s\n", queue_name);
+    }else{
+        log_printf(LOG_LEVEL_DEBUG, "Successfully closed queue: %s\n", queue_name);
+    }
+
 }
 
 static void service_have_events(int sockfd, mqd_t queue, const torrent_t *torrent, unsigned char *havebf)
@@ -638,11 +650,12 @@ static void *peer_connection(void *arg)
     queue = peer_queue_open(O_RDONLY | O_CREAT | O_NONBLOCK);
     if(queue == (mqd_t)-1)
         goto fail_init;
+    pthread_cleanup_push(queue_cleanup, NULL);{
 
     /* Init state */
     state = conn_state_init(torrent);
     if(!state)
-        goto fail_init;
+        goto fail_init_state;
     pthread_cleanup_push(conn_state_cleanup, state);{
 
     for(int i = 0; i < LBITFIELD_NUM_BYTES(dict_get_size(torrent->pieces)); i++) {
@@ -650,7 +663,6 @@ static void *peer_connection(void *arg)
     }
     printf("\n");
 
-    //send the initial bitfield:
     peer_msg_t bitmsg;
     bitmsg.type = MSG_BITFIELD;
     bitmsg.payload.bitfield = byte_str_new(LBITFIELD_NUM_BYTES(state->bitlen), state->local_have);
@@ -691,6 +703,8 @@ static void *peer_connection(void *arg)
     }
 
 abort_conn: ;
+    }pthread_cleanup_pop(1);
+fail_init_state: ;
     }pthread_cleanup_pop(1);
 fail_init: ;
     }pthread_cleanup_pop(1);

@@ -1,6 +1,6 @@
 CC=gcc
 CFLAGS=-std=gnu99 -pthread -g
-DEFS=-D_FILE_OFFSET_BITS=64 -D__USE_BSD
+DEFS=-D_FILE_OFFSET_BITS=64 -D__USE_BSD -D_GNU_SOURCE
 LD=-lrt
 BIN=./bin/bitfiend
 

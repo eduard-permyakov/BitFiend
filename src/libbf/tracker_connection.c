@@ -29,7 +29,12 @@ static tracker_announce_request_t *create_tracker_request(const void *arg)
         ret->port = targ->port;
         ret->compact = true;
         SET_HAS(ret, REQUEST_HAS_COMPACT);        
-        ret->numwant = 50; 
+
+        pthread_mutex_lock(&targ->torrent->sh_lock);
+        unsigned num_conns = list_get_size(targ->torrent->sh.peer_connections);
+        pthread_mutex_unlock(&targ->torrent->sh_lock);
+
+        ret->numwant = targ->torrent->max_peers - num_conns;
         SET_HAS(ret, REQUEST_HAS_NUMWANT);        
 
         pthread_mutex_lock(&targ->torrent->sh_lock);
@@ -65,6 +70,15 @@ static int create_peer_connection(peer_t *peer, torrent_t *torrent)
         goto fail_create;
     
     pthread_mutex_lock(&torrent->sh_lock);
+
+    unsigned num_conns = list_get_size(torrent->sh.peer_connections);
+    if(num_conns == torrent->max_peers) {
+        pthread_mutex_unlock(&torrent->sh_lock);
+        free(arg);
+        free(conn);
+        return 0;
+    }
+
     list_add(torrent->sh.peer_connections, (unsigned char*)&conn, sizeof(peer_conn_t*));  
     pthread_mutex_unlock(&torrent->sh_lock);
 

@@ -228,7 +228,10 @@ torrent_t *torrent_init(bencode_obj_t *meta, const char *destdir)
 
     }
 
+    assert(ret->announce);
+
     pthread_mutex_init(&ret->sh_lock, NULL); 
+    ret->max_peers = DEFAULT_MAX_PEERS;
     ret->sh.peer_connections = list_init();
     ret->sh.piece_states = malloc(dict_get_size(ret->pieces));
     memset(ret->sh.piece_states, PIECE_STATE_NOT_REQUESTED, dict_get_size(ret->pieces));
