@@ -238,11 +238,6 @@ torrent_t *torrent_init(bencode_obj_t *meta, const char *destdir)
     ret->sh.pieces_left = dict_get_size(ret->pieces);
     ret->sh.priority = DEFAULT_PRIORITY;
     ret->sh.state = TORRENT_STATE_LEECHING;
-    ret->sh.progress = 0.0f;
-    ret->sh.upspeed = 0.0f;
-    ret->sh.downspeed = 0.0f;
-    ret->sh.uploaded = 0;  
-    ret->sh.downloaded = 0;
     ret->sh.completed = false;
 
     return ret;
@@ -285,12 +280,6 @@ void torrent_free(torrent_t *torrent)
         free(torrent->created_by);
 
     free(torrent);
-}
-
-unsigned torrent_left_to_download(torrent_t *torrent)
-{
-    //TODO
-    return 0;
 }
 
 unsigned char *torrent_make_bitfield(const torrent_t *torrent)
@@ -394,6 +383,30 @@ int torrent_complete(torrent_t *torrent)
         dl_file_complete(file);
     }
     log_printf(LOG_LEVEL_INFO, "Torrent completed!\n");
+
+    //TODO: send an immediate "completed" event to the tracker at this point
+}
+
+unsigned torrent_left_to_download(torrent_t *torrent)
+{
+    //TODO
+    unsigned ret;
+    pthread_mutex_lock(&torrent->sh_lock);
+    ret = torrent->sh.pieces_left * PEER_REQUEST_SIZE;
+    pthread_mutex_unlock(&torrent->sh_lock);
+    return ret;
+}
+
+unsigned torrent_downloaded(torrent_t *torrent)
+{
+    //TODO
+    return 0;
+}
+
+unsigned torrent_uploaded(torrent_t *torrent)
+{
+    //TOD
+    return 0;
 }
 
 //temp
@@ -407,9 +420,6 @@ void print_torrent(torrent_t *torrent)
         list_get_size(torrent->sh.peer_connections));
     printf("\tpriority: %u\n", torrent->sh.priority);
     printf("\tstate: %d\n", torrent->sh.state);
-    printf("\tprogress: %f\n", torrent->sh.progress);
-    printf("\tupspeed: %f\n", torrent->sh.upspeed);
-    printf("\tdownspeed: %f\n", torrent->sh.downspeed);
     printf("\tcompleted: %hhd\n", torrent->sh.completed); 
     printf("\tinfo hash: ");
     for(int i = 0; i < 20; i++) {

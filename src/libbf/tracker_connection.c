@@ -37,13 +37,9 @@ static tracker_announce_request_t *create_tracker_request(const void *arg)
         ret->numwant = targ->torrent->max_peers - num_conns;
         SET_HAS(ret, REQUEST_HAS_NUMWANT);        
 
-        pthread_mutex_lock(&targ->torrent->sh_lock);
-
-        ret->uploaded = targ->torrent->sh.uploaded;
-        ret->downloaded = targ->torrent->sh.downloaded;
+        ret->uploaded = torrent_uploaded(targ->torrent);
+        ret->downloaded = torrent_downloaded(targ->torrent);
         ret->left = torrent_left_to_download(targ->torrent);
-
-        pthread_mutex_unlock(&targ->torrent->sh_lock);
     }
 
     return ret;
