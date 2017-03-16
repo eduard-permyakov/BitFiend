@@ -89,3 +89,15 @@ void dl_file_getfilemem(const dl_file_t *file, filemem_t *out)
     out->size = file->size;
 }
 
+int dl_file_complete(dl_file_t* file)
+{
+    char *trim;
+    char oldpath[512];
+    strncpy(oldpath, file->path, sizeof(oldpath));
+    trim = strstr(file->path, ".incomplete");
+    assert(trim && trim > file->path);
+
+    *trim = '\0'; 
+    rename(oldpath, file->path);
+}
+

@@ -13,5 +13,6 @@ typedef struct filemem {
 dl_file_t  *dl_file_create_and_open(size_t size, const char *path);
 int         dl_file_close_and_free(dl_file_t *file);
 void        dl_file_getfilemem(const dl_file_t *file, filemem_t *out);
+int         dl_file_complete(dl_file_t* file);
 
 #endif

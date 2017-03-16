@@ -381,6 +381,21 @@ int torrent_next_request(torrent_t *torrent, unsigned char *peer_have_bf, unsign
     return 0;
 }
 
+int torrent_complete(torrent_t *torrent)
+{
+    pthread_mutex_lock(&torrent->sh_lock);
+    torrent->sh.completed = true;
+    torrent->sh.state = TORRENT_STATE_SEEDING;
+    pthread_mutex_unlock(&torrent->sh_lock);
+
+    const unsigned char *entry;
+    FOREACH_ENTRY(entry, torrent->files){
+        dl_file_t *file = *(dl_file_t**)entry;
+        dl_file_complete(file);
+    }
+    log_printf(LOG_LEVEL_INFO, "Torrent completed!\n");
+}
+
 //temp
 void print_torrent(torrent_t *torrent)
 {

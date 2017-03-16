@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-void reap_periodic_cleanup(void *arg)
+static void reap_periodic_cleanup(void *arg)
 {
     free(arg);
 }
@@ -56,7 +56,7 @@ static void *reap_periodic(void *arg)
                 if(pthread_tryjoin_np(conn->thread, &ret) == 0) {
 
                     list_remove(torrent->sh.peer_connections, (unsigned char*)&conn);  
-                    log_printf(LOG_LEVEL_ERROR, "Reaped exited peer thread\n");
+                    log_printf(LOG_LEVEL_INFO, "Reaped exited peer thread\n");
                 }
             }
             pthread_mutex_unlock(&torrent->sh_lock);

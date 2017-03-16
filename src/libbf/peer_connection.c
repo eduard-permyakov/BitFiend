@@ -340,9 +340,7 @@ static void handle_piece_dl_completion(int sockfd, torrent_t *torrent, unsigned 
     log_printf(LOG_LEVEL_DEBUG, "PIECES LEFT: %u\n", pieces_left);
 
     if(completed){
-        log_printf(LOG_LEVEL_INFO, "********************************\n");
-        log_printf(LOG_LEVEL_INFO, "Torrent successfully downloaded!\n");
-        log_printf(LOG_LEVEL_INFO, "********************************\n");
+        torrent_complete(torrent);
     }
 
     peer_msg_t tosend;     
@@ -415,10 +413,6 @@ static void process_msg(int sockfd, peer_msg_t *msg, conn_state_t *state, torren
             state->remote.interested = true;
             log_printf(LOG_LEVEL_DEBUG, "The peer has become interested in us\n");
 
-            /* For now, we unchocke the peer as soon as they become interested */
-            //if(state->remote.choked)  
-            //    unchoke(sockfd, state, torrent);
-
             break;
         case MSG_NOT_INTERESTED:
             state->remote.interested = false; 
@@ -448,7 +442,7 @@ static void process_msg(int sockfd, peer_msg_t *msg, conn_state_t *state, torren
 
             break;
         case MSG_REQUEST:
-            log_printf(LOG_LEVEL_INFO,
+            log_printf(LOG_LEVEL_DEBUG,
                        "pushing request:\n"
                        "    index: %u\n"
                        "    length: %u\n"
@@ -499,7 +493,7 @@ static void service_peer_requests(int sockfd, conn_state_t *state, const torrent
     request_msg_t request;     
     while(queue_pop(state->peer_requests, &request) == 0) {
 
-        log_printf(LOG_LEVEL_INFO,
+        log_printf(LOG_LEVEL_DEBUG,
                    "popped request:\n"
                    "    index: %u\n"
                    "    length: %u\n"
@@ -657,11 +651,6 @@ static void *peer_connection(void *arg)
     if(!state)
         goto fail_init_state;
     pthread_cleanup_push(conn_state_cleanup, state);{
-
-    for(int i = 0; i < LBITFIELD_NUM_BYTES(dict_get_size(torrent->pieces)); i++) {
-        printf("%02X", (unsigned char) state->local_have[i]); 
-    }
-    printf("\n");
 
     peer_msg_t bitmsg;
     bitmsg.type = MSG_BITFIELD;
