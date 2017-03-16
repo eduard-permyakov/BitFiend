@@ -6,7 +6,6 @@
 #include <stdint.h>
 
 typedef enum {
-    MSG_KEEPALIVE       = -1,
     MSG_CHOKE           = 0,
     MSG_UNCHOKE         = 1,
     MSG_INTERESTED      = 2,
@@ -17,6 +16,7 @@ typedef enum {
     MSG_PIECE           = 7,
     MSG_CANCEL          = 8,
     MSG_PORT            = 9,
+    MSG_KEEPALIVE,
     MSG_MAX
 }msg_type_t;
 
@@ -49,9 +49,6 @@ int  peer_send_handshake(int sockfd, char infohash[20]);
 int  peer_recv_handshake(int sockfd, char outhash[20], char outpeerid[20], bool peer_id);
 int  peer_msg_send(int sockfd, peer_msg_t *msg, const torrent_t *torrent);
 int  peer_msg_recv(int sockfd, peer_msg_t *out, const torrent_t *torrent);
-/* Wait up to "timeout" seconds until the first byte of the message comes.
- * The initial recv is a thread cancellation point. */
-int  peer_msg_waiton_recv(int sockfd, peer_msg_t *out, const torrent_t *torrent, unsigned timeout);
 bool peer_msg_buff_nonempty(int sockfd);
 
 #endif
