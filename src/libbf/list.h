@@ -13,7 +13,7 @@ int                 list_remove(list_t *list, unsigned char *data);
 bool                list_contains(list_t *list, unsigned char *data);
 unsigned            list_get_size(list_t *list);
 
-typedef struct list_iter list_iter_t;
+typedef void list_iter_t;
 
 const list_iter_t   *list_iter_first(const list_t *list);
 const list_iter_t   *list_iter_next(const list_iter_t *iter);

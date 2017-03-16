@@ -19,7 +19,7 @@ unsigned        dict_get_size(dict_t *dict);
  * should not be mixed with arbitrary string keys in a single dict */
 void            dict_key_for_uint32(uint32_t key, char *out, size_t len);
 
-typedef struct dict_iter dict_iter_t;
+typedef void dict_iter_t;
 
 const dict_iter_t   *dict_iter_first(const dict_t *dict);
 const dict_iter_t   *dict_iter_next(dict_t *dict, const dict_iter_t *iter);

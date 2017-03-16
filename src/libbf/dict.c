@@ -24,15 +24,8 @@
     }while(0)
     
 
-struct dict_iter{
-    struct dict_entry *next;
-};
-
 typedef struct dict_entry{
-    union {
-        struct dict_entry *next;
-        struct dict_iter iter;
-    };
+    struct dict_entry *next;
     char *key;
     size_t size;
     unsigned char value[];    
@@ -208,7 +201,7 @@ const dict_iter_t *dict_iter_first(const dict_t *dict)
 {
     for(unsigned i = 0; i < dict->binsize; i++) {
         FOREACH_ENTRY_IN_BIN(entry, dict, i) {
-            return &entry->iter;
+            return entry;
         }
     }
     return NULL;
@@ -216,14 +209,14 @@ const dict_iter_t *dict_iter_first(const dict_t *dict)
 
 const dict_iter_t *dict_iter_next(dict_t *dict, const dict_iter_t *iter)
 {
-    if(iter->next)
-        return &(iter->next->iter);
+    if(((dict_entry_t*)iter)->next)
+        return ((dict_entry_t*)iter)->next;
     
     unsigned hash = hashf(dict->binsize, dict_iter_get_key(iter));
 
     for(unsigned i = hash + 1; i < dict->binsize; i++) {
         FOREACH_ENTRY_IN_BIN(entry, dict, i) {
-            return &entry->iter;
+            return entry;
         }
     }
     return NULL;
@@ -231,16 +224,12 @@ const dict_iter_t *dict_iter_next(dict_t *dict, const dict_iter_t *iter)
 
 const unsigned char *dict_iter_get_value(const dict_iter_t *iter)
 {
-    size_t offset = offsetof(dict_entry_t, value) - offsetof(dict_entry_t, iter); 
-    return (unsigned char*)((unsigned char*)iter + offset);
+    return ((dict_entry_t*)iter)->value;
 }
 
 const char *dict_iter_get_key(const dict_iter_t *iter)
 {
-    const char *ret;
-    size_t offset = offsetof(dict_entry_t, key) - offsetof(dict_entry_t, iter); 
-    memcpy(&ret, ((unsigned char*)iter + offset), sizeof(const char *));
-    return ret;
+    return ((dict_entry_t*)iter)->key;
 }
 
 void dict_key_for_uint32(uint32_t key, char *out, size_t len)

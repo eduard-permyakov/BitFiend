@@ -11,15 +11,8 @@
 #define FOREACH_NODE_AND_PREV(_node, _prev, _list) \
     for(node_t *_node = _list->head, *_prev = NULL; _node; _prev = _node, _node = _node->next)
 
-typedef struct list_iter{
-    struct list_iter *next;
-}list_iter_t;
-
 typedef struct node {
-    union {
-        struct node *next;
-        list_iter_t iter;
-    };
+    struct node *next;
     size_t size;
     unsigned char data[];
 }node_t;
@@ -128,18 +121,17 @@ bool list_contains(list_t *list, unsigned char *data)
 const list_iter_t *list_iter_first(const list_t *list)
 {
     if(list->head)
-        return &(list->head->iter);
+        return list->head;
     else 
         return NULL;
 }
 
 const list_iter_t *list_iter_next(const list_iter_t *iter)
 {
-    return iter->next;
+    return ((node_t*)iter)->next;
 }
 
 const unsigned char *list_iter_get_value(const list_iter_t *iter)
 {
-    size_t offset = offsetof(struct node, data) - offsetof(struct node, next); 
-    return (unsigned char*)((unsigned char*)iter + offset);
+    return ((node_t*)iter)->data;
 }
