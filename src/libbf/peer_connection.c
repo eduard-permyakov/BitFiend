@@ -16,11 +16,13 @@
 #include <time.h>
 #include <errno.h>
 #include <assert.h>
+#include <time.h>
 
 #include <sys/queue.h>
 
 #define PEER_CONNECT_TIMEOUT_SEC        5
 #define PEER_NUM_OUTSTANDING_REQUESTS   1
+#define PEER_TIMEOUT_SEC                120
 
 typedef struct peer_state {
     bool choked;
@@ -52,7 +54,7 @@ static mqd_t         peer_queue_open(int flags);
 static void          service_have_events(int sockfd, mqd_t queue, const torrent_t *torrent, 
                                          unsigned char *havebf);
 static void          service_peer_requests(int sockfd, conn_state_t *state, const torrent_t *torrent);
-static int           process_queued_msgs(int sockfd, torrent_t *torrent, conn_state_t *state);
+static int           process_queued_msgs(int sockfd, torrent_t *torrent, conn_state_t *state, time_t *last);
 static void          process_msg(int sockfd, peer_msg_t *msg, conn_state_t *state, torrent_t *torrent);
 static void          process_piece_msg(int sockfd, conn_state_t *state, piece_msg_t *msg, torrent_t *torrent);
 static void          handle_piece_dl_completion(int sockfd, torrent_t *torrent, unsigned index);
@@ -466,7 +468,7 @@ static void process_msg(int sockfd, peer_msg_t *msg, conn_state_t *state, torren
     }
 }
 
-static int process_queued_msgs(int sockfd, torrent_t *torrent, conn_state_t *state)
+static int process_queued_msgs(int sockfd, torrent_t *torrent, conn_state_t *state, time_t *last)
 {
     while(peer_msg_buff_nonempty(sockfd)) {
         
@@ -478,6 +480,7 @@ static int process_queued_msgs(int sockfd, torrent_t *torrent, conn_state_t *sta
 
         if(peer_msg_recv(sockfd, &msg, torrent))
             return -1;
+        *last = time(NULL);
 
         process_msg(sockfd, &msg, state, torrent);
         if(msg.type == MSG_BITFIELD)
@@ -621,6 +624,7 @@ static void *peer_connection(void *arg)
     char              peer_id[20];
     char              info_hash[20];
     conn_state_t     *state;
+    time_t            last_msg_time;
 
     /* Init "sockfd" */
     if(parg->has_sockfd) {
@@ -663,7 +667,14 @@ static void *peer_connection(void *arg)
 
     unchoke(sockfd, state, torrent);
 
+    last_msg_time = time(NULL);
     while(true) {
+
+        time_t curr = time(NULL);
+        if(curr - last_msg_time > PEER_TIMEOUT_SEC){
+            log_printf(LOG_LEVEL_WARNING, "Connection with peer (%s) timed out!\n", ipstr);
+            goto abort_conn;
+        }
 
         pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
         usleep(250 * 1000);
@@ -672,7 +683,7 @@ static void *peer_connection(void *arg)
         service_have_events(sockfd, queue, torrent, state->local_have);
 
         /* Cancellation point in this func also, will update state based on message contents */
-        if(process_queued_msgs(sockfd, torrent, state))
+        if(process_queued_msgs(sockfd, torrent, state, &last_msg_time))
             goto abort_conn;
 
         /* If there are any requests for us to service, we prioritize that */
