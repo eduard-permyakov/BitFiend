@@ -26,7 +26,7 @@ libbf: $(LIBBF_OBJS)
 
 linux-cli: CFLAGS=-std=gnu99 -pthread -g
 linux-cli: LDFLAGS=-L./lib -lbf -lrt
-linux-cli: INCLUDE=-I./src/libbf
+linux-cli: INCLUDE=-I./src/
 
 LINUXCLI_SRCS=$(wildcard ./src/ui/linux-cli/*.c)
 LINUXCLI_OBJS=$(LINUXCLI_SRCS:./src/%.c=./obj/%.o)
