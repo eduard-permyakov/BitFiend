@@ -1,4 +1,5 @@
 #include "peer_id.h"
+#include "bitfiend.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -6,11 +7,9 @@
 #include <stdlib.h>
 #include <time.h>
 
-char                        g_local_peer_id[20];
+#define LIBBF_CLIENT_ID "gg" //temp spoof for development
 
-static const char          *s_cli_id = "gg"; //temp spoof for develpment
-static const unsigned int   s_major_ver = 0;
-static const unsigned int   s_minor_ver = 0;
+char g_local_peer_id[20];
 
 void peer_id_create(char outbuff[20])
 {
@@ -18,7 +17,7 @@ void peer_id_create(char outbuff[20])
     unsigned int seed = time(NULL);
 
     memset(outbuff, 0, 20);
-    offset += snprintf(outbuff, 20, "-%.*s%02u%02u-", 2, s_cli_id, s_major_ver, s_minor_ver); 
+    offset += snprintf(outbuff, 20, "-%.*s%02u%02u-", 2, LIBBF_CLIENT_ID, LIBBF_VER_MAJOR, LIBBF_VER_MINOR); 
 
     for(int i = 0; i < 12/(sizeof(int32_t)); i++){
         int32_t r = rand_r(&seed);

@@ -4,6 +4,9 @@
 #include "torrent.h"
 //TODO change api to return void pointer
 
+#define LIBBF_VER_MAJOR 0
+#define LIBBF_VER_MINOR 1
+
 enum{
     BITFIEND_FAILURE = -1,
     BITFIEND_SUCCESS
