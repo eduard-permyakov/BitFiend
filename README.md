@@ -1,7 +1,7 @@
 # BitFiend #
 
-BitFiend is a BitTorrent client written in C. It can be built for Linux and 
-has a command line interface. 
+BitFiend is a BitTorrent client written in C. It is multithread with POSIX threads. 
+It can be built for Linux and has a command line interface. 
 
 The client has successfully torrented Ubuntu ISOs and a number of academic torrents. 
 At the moment, it lacks support for UDP trackers, accurate bandwidth reporting,
