@@ -15,5 +15,5 @@ To build the core of BitFiend as a static library, run `make libbf` in the top-l
 directory. The library API can be found in `libbf/bitfiend.h`
 
 BitFiend does not depend on any third party libraries. It requires a C99 compiler with 
-GNU extensions as well and POSIX compliance. Some non-portable Linux-specific code is
+GNU extensions as well as POSIX compliance. Some non-portable Linux-specific code is
 present.
