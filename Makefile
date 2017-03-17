@@ -22,29 +22,29 @@ libbf: $(LIBBF_OBJS)
 
 -include $(LIBBF_DEPS)
 
-########## LINUXCLI ############################################################
+########## CLI #################################################################
 
-linux-cli: CFLAGS=-std=gnu99 -pthread -g
-linux-cli: LDFLAGS=-L./lib -lbf -lrt
-linux-cli: INCLUDE=-I./src/
+bfcli: CFLAGS=-std=gnu99 -pthread -g
+bfcli: LDFLAGS=-L./lib -lbf -lrt
+bfcli: INCLUDE=-I./src/
 
-LINUXCLI_SRCS=$(wildcard ./src/ui/linux-cli/*.c)
-LINUXCLI_OBJS=$(LINUXCLI_SRCS:./src/%.c=./obj/%.o)
-LINUXCLI_DEPS=$(LINUXCLI_OBJS:%.o=%.d)
+BFCLI_SRCS=$(wildcard ./src/ui/cli/*.c)
+BFCLI_OBJS=$(BFCLI_SRCS:./src/%.c=./obj/%.o)
+BFCLI_DEPS=$(BFCLI_OBJS:%.o=%.d)
 
-./obj/ui/linux-cli/%.o: ./src/ui/linux-cli/%.c 
-	@mkdir -p ./obj/ui/linux-cli
-	$(CC) -MT $@ -MMD -MP -MF ./obj/ui/linux-cli/$*.d $(INCLUDE) $(CFLAGS) -c $< -o $@
+./obj/ui/cli/%.o: ./src/ui/cli/%.c 
+	@mkdir -p ./obj/ui/cli
+	$(CC) -MT $@ -MMD -MP -MF ./obj/ui/cli/$*.d $(INCLUDE) $(CFLAGS) -c $< -o $@
 
-linux-cli: $(LINUXCLI_OBJS) libbf
+bfcli: $(BFCLI_OBJS) libbf
 	@mkdir -p ./bin
-	$(CC) $(CFLAGS) $(LINUXCLI_OBJS) -o $(BIN) $(LDFLAGS)
+	$(CC) $(CFLAGS) $(BFCLI_OBJS) -o $(BIN) $(LDFLAGS)
 
--include $(LINUXCLI_DEPS)
+-include $(BFCLI_DEPS)
 
 ################################################################################
 
 .PHONY: clean
 clean:
-	@rm -f $(LIBBF_OBJS) $(LIBBF_DEPS) $(LINUXCLI_OBJS) $(LINUXCLI_DEPS) $(BIN) $(LIB)
+	@rm -f $(LIBBF_OBJS) $(LIBBF_DEPS) $(BFCLI_OBJS) $(BFCLI_DEPS) $(BIN) $(LIB)
 
