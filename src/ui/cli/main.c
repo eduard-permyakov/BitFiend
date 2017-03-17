@@ -12,6 +12,7 @@
 
 #define CLI_VER_MAJOR 0
 #define CLI_VER_MINOR 1
+#define CLI_VER_PATCH 0
 
 static void print_welcome(void)
 {
@@ -20,7 +21,8 @@ static void print_welcome(void)
     printf("  / __  / / __/ /_  / / _ \\/ __ \\/ __  / \n");
     printf(" / /_/ / / /_/ __/ / /  __/ / / / /_/ /  \n");
     printf("/_____/_/\\__/_/   /_/\\___/_/ /_/\\__,_/   ");
-    printf("libbf %d.%d cli %d.%d\n\n", LIBBF_VER_MAJOR, LIBBF_VER_MINOR, CLI_VER_MAJOR, CLI_VER_MINOR);
+    printf("libbf %d.%d.%d cli %d.%d.%d\n\n", LIBBF_VER_MAJOR, LIBBF_VER_MINOR, LIBBF_VER_PATCH,
+        CLI_VER_MAJOR, CLI_VER_MINOR, CLI_VER_PATCH);
     printf("Copyright (c) 2017 Eduard Permyakov\n");
     printf("This is free software: you are free to change and redistribute it.\n");
     printf("Type \"help\" for a list of commands or \"exit\" to quit.\n");
@@ -82,7 +84,7 @@ int main(int argc, char **argv)
             printf("%s is not a valid command. See \"help\".\n", line);
     }
 
-    //Client will be shutdown by exit command
+    /* Client will be shutdown by exit command */
     assert(0);
 }
 

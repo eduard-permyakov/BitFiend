@@ -3,6 +3,7 @@
 
 #define LIBBF_VER_MAJOR 0
 #define LIBBF_VER_MINOR 1
+#define LIBBF_VER_PATCH 0
 
 enum{
     BITFIEND_FAILURE = -1,
