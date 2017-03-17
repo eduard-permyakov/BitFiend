@@ -31,11 +31,16 @@ static pthread_mutex_t   s_unassoc_peerthreads_lock = PTHREAD_MUTEX_INITIALIZER;
 static list_t           *s_unassoc_peerthreads;
 
 static bool              s_shutdown = false;
+static FILE             *s_logfile;
 
-int bitfiend_init(void)
+int bitfiend_init(const char *logfile)
 {
+    s_logfile = fopen(logfile, "a");
+    if(!s_logfile)
+        return BITFIEND_FAILURE;
+
     log_set_lvl(LOG_LEVEL_DEBUG);    
-    log_set_logfile(stdout);
+    log_set_logfile(s_logfile);
 
     peer_id_create(g_local_peer_id);
 
@@ -170,18 +175,34 @@ int bitfiend_shutdown(void)
     else
         log_printf(LOG_LEVEL_INFO, "BitFiend shutdown error\n");
 
+    fclose(s_logfile);
+
     return ret;
 }
 
-torrent_t *bitfiend_add_torrent(const char *metafile, const char *destdir)
+bf_htorrent_t *bitfiend_add_torrent(const char *metafile, const char *destdir)
 {
+    char metacopy[strlen(metafile) + 1];
+    strcpy(metacopy, metafile);
+
+    char *saveptr, *token, *next;
+    token = strtok_r(metacopy, "/", &saveptr);
+    while(next = strtok_r(NULL, "/", &saveptr)) {
+        token = next;
+    }
+    /* Now token points to the filename */
+    char *trim = strstr(token, ".torrent");
+    if(trim)
+        *trim = '\0';
+
     bencode_obj_t *obj = torrent_file_parse(metafile);
     if(!obj)
         goto fail_parse;
 
-    torrent_t *torrent = torrent_init(obj, destdir);
-    extern void print_torrent(torrent_t *torrent);
-    print_torrent(torrent);
+    torrent_t *torrent = torrent_init(obj, token, destdir);
+
+    //extern void print_torrent(torrent_t *torrent);
+    //print_torrent(torrent);
 
     bencode_free_obj_and_data_recursive(obj);
     if(!torrent)
@@ -206,24 +227,46 @@ fail_parse:
     return NULL;
 }
 
-int bitfiend_start_torrent(torrent_t *torrent)
+int bitfiend_remove_torrent(bf_htorrent_t *torrent)
 {
+    pthread_mutex_lock(&s_torrents_lock);
+    list_remove(s_torrents, (unsigned char*)&torrent);
+    pthread_mutex_unlock(&s_torrents_lock);
 
+    shutdown_torrent((torrent_t*)torrent);
 }
 
-int bitfiend_pause_torrent(torrent_t *torrent)
+int bitfiend_stat_torrent(bf_htorrent_t *torrent, bf_stat_t *out)
 {
+    torrent_t *ptr = (torrent_t*)torrent;
 
+    out->name = ptr->name;
+    out->tot_pieces = dict_get_size(ptr->pieces);
+    pthread_mutex_lock(&ptr->sh_lock); 
+    out->pieces_left = ptr->sh.pieces_left;
+    pthread_mutex_unlock(&ptr->sh_lock); 
 }
 
-int bitfiend_set_priority(torrent_t *torrent)
+void bitfiend_foreach_torrent(void (*func)(bf_htorrent_t *torrent, void *arg), void *arg)
 {
+    const unsigned char *entry;
 
-}
+    pthread_mutex_lock(&s_torrents_lock);
+    const list_iter_t *iter = list_iter_first(s_torrents);
+    pthread_mutex_unlock(&s_torrents_lock);
 
-int bitfiend_remove_torrent(torrent_t *torrent)
-{
+    while(iter) {
+        const list_iter_t *next;
 
+        pthread_mutex_lock(&s_torrents_lock);
+        next = list_iter_next(iter);
+        pthread_mutex_unlock(&s_torrents_lock);
+
+        torrent_t *torrent = *((torrent_t**)list_iter_get_value(iter));
+        func(torrent, arg);
+
+        iter = next;
+    }
 }
 
 torrent_t *bitfiend_assoc_peer(peer_conn_t *peer, char infohash[20])

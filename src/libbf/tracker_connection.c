@@ -141,9 +141,9 @@ static void *periodic_announce(void *arg)
         resp = tracker_announce(targ->torrent->announce, req);
 
         if(resp) {
-            //temp
-            extern void print_tracker_response(tracker_announce_resp_t *resp);
-            print_tracker_response(resp);
+            //extern void print_tracker_response(tracker_announce_resp_t *resp);
+            //print_tracker_response(resp);
+
             interval = resp->interval;
             log_printf(LOG_LEVEL_DEBUG, "Re-announcing to tracker again in %d seconds\n", interval);
 

@@ -26,6 +26,7 @@ typedef struct torrent {
     unsigned            piece_len;
     list_t             *files;
     char                info_hash[20];
+    char               *name;
     char               *announce;
     char               *comment;
     char               *created_by;
@@ -43,7 +44,7 @@ typedef struct torrent {
     pthread_mutex_t     sh_lock;
 }torrent_t;
 
-torrent_t     *torrent_init(bencode_obj_t *meta, const char *destdir);
+torrent_t     *torrent_init(bencode_obj_t *meta, const char *name, const char *destdir);
 void           torrent_free(torrent_t *torrent);
 unsigned char *torrent_make_bitfield(const torrent_t *torrent);
 bool           torrent_sha1_verify(const torrent_t *torrent, unsigned index);

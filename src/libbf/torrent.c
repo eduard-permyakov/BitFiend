@@ -170,7 +170,7 @@ static int populate_from_info_dic(torrent_t *torrent, dict_t *info, const char *
     return ret;
 }
 
-torrent_t *torrent_init(bencode_obj_t *meta, const char *destdir)
+torrent_t *torrent_init(bencode_obj_t *meta, const char *name, const char *destdir)
 {
     torrent_t *ret = malloc(sizeof(torrent_t));
     if(!ret)
@@ -240,6 +240,9 @@ torrent_t *torrent_init(bencode_obj_t *meta, const char *destdir)
     ret->sh.state = TORRENT_STATE_LEECHING;
     ret->sh.completed = false;
 
+    ret->name = malloc(strlen(name) + 1); 
+    strcpy(ret->name, name);
+
     return ret;
 
 fail_alloc:
@@ -278,6 +281,8 @@ void torrent_free(torrent_t *torrent)
 
     if(torrent->created_by)
         free(torrent->created_by);
+
+    free(torrent->name);
 
     free(torrent);
 }
@@ -413,6 +418,7 @@ unsigned torrent_uploaded(torrent_t *torrent)
 void print_torrent(torrent_t *torrent)
 {
     printf("TORRENT DETAILS:\n");
+    printf("\tname: %s", torrent->name);
     printf("\tpieces: %p, size: %u\n", torrent->pieces, dict_get_size(torrent->pieces));
     printf("\tpiece len: %u\n", torrent->piece_len);
     printf("\tfiles: %p, size: %u\n", torrent->files, list_get_size(torrent->files));

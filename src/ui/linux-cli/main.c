@@ -6,16 +6,12 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
+#include <assert.h>
+#include <ctype.h>
 
 #define CLI_VER_MAJOR 0
 #define CLI_VER_MINOR 1
-
-static volatile sig_atomic_t running = true;
-
-static void sigint_handler(int signum)
-{
-    running = false; 
-}
 
 static void print_welcome(void)
 {
@@ -27,7 +23,7 @@ static void print_welcome(void)
     printf("libbf %d.%d cli %d.%d\n\n", LIBBF_VER_MAJOR, LIBBF_VER_MINOR, CLI_VER_MAJOR, CLI_VER_MINOR);
     printf("Copyright (c) 2017 Eduard Permyakov\n");
     printf("This is free software: you are free to change and redistribute it.\n");
-    printf("Type \"help\" for a list of commands.\n");
+    printf("Type \"help\" for a list of commands or \"exit\" to quit.\n");
 }
 
 static void print_prompt(void)
@@ -46,36 +42,47 @@ static void next_line(char *out, size_t n)
     }
 }
 
+static bool is_empty_line(const char *str) 
+{
+    while (*str) {
+        if (!isspace(*str))
+            return false;
+        str++;
+    }
+    return true;
+}
+
 int main(int argc, char **argv)
 {
+    if(argc != 1){
+        printf("Usage: %s\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
+    
     print_welcome();
 
-    signal(SIGINT, sigint_handler);
+    signal(SIGINT, SIG_IGN); //nicer handling of SIGINT eventually
     signal(SIGPIPE, SIG_IGN);
-    //if(bitfiend_init() != BITFIEND_SUCCESS){
-    //    fpritnf("Failed initializing libbf. Check the logs!\n");
-    //    exit(EXIT_FAILURE);
-    //}
 
+    if(bitfiend_init("./bitfiend.log") != BITFIEND_SUCCESS){
+        fprintf(stderr, "Failed initializing libbf. Check the logs!\n");
+        exit(EXIT_FAILURE);
+    }
 
     while(true) {
         print_prompt();
 
         char line[256];
         next_line(line, sizeof(line));
-        command_parse_and_exec(line);
+
+        if(is_empty_line(line))
+            continue;
+
+        if(command_parse_and_exec(line) == CMD_FAIL_EXEC)
+            printf("%s is not a valid command. See \"help\".\n", line);
     }
 
-    //bitfiend_shutdown();
-    return 0;
-
-
-    bitfiend_add_torrent("/home/eduard/Downloads/ubuntu-16.04.2-desktop-amd64.iso.torrent", 
-        "/home/eduard/Desktop");
-    //bitfiend_add_torrent("/home/eduard/Downloads/TEST1.torrent", "/home/eduard/Desktop");
-
-    while(running)
-        ;
-
-    bitfiend_shutdown();
+    //Client will be shutdown by exit command
+    assert(0);
 }
+
