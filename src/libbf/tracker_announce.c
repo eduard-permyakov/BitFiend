@@ -1,3 +1,22 @@
+/*    
+ *  This file is part of BitFiend. 
+ *  Copyright (C) 2017 Eduard Permyakov 
+ *
+ *  BitFiend is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  BitFiend is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ */
+
 #include "tracker_announce.h"
 #include "url.h"
 #include "bencode.h"
@@ -16,7 +35,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
-#include <arpa/inet.h> //temp
+#include <arpa/inet.h> 
 
 static bool        is_valid_url_char(const unsigned char c);
 static int         print_url_encoded_char(char *out, size_t n, unsigned char c);
