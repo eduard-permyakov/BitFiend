@@ -14,7 +14,6 @@ typedef struct cmd {
 	const char *name;
 	int (*func)(int argc, char **argv);
     char *usage;
-    char *desc;
 }cmd_t;
 
 static int exit_cmd(int argc, char **argv);
@@ -33,12 +32,51 @@ static cmd_t s_cmd_table[] = {
 	{"stat", stat_cmd, "stat <torrent_index>"}
 };
 
-static void print_usage(const char *cmdname);
-static void exit_cmd_foreach_func(bf_htorrent_t *torrent, void *arg);
-static void ls_cmd_foreach_func(bf_htorrent_t *torrent, void *arg);
-static void rm_cmd_foreach_func(bf_htorrent_t *torrent, void *arg);
-static void stat_cmd_foreach_func(bf_htorrent_t *torrent, void *arg);
+static void           search_handle_func(bf_htorrent_t *torrent, void *arg);
+static bf_htorrent_t *handle_at_index(int index);
+static int            num_torrents(void);
+static void           print_usage(const char *cmdname);
+static void           ls_cmd_foreach_func(bf_htorrent_t *torrent, void *arg);
 
+struct search_arg {
+    int target;
+    int curr;
+    bf_htorrent_t *out;
+};
+
+static void search_handle_func(bf_htorrent_t *torrent, void *arg)
+{
+    struct search_arg *sarg = (struct search_arg*)arg;    
+
+    if(sarg->target == sarg->curr){
+        sarg->out = torrent;        
+    }
+    
+    sarg->curr++;
+}
+
+static bf_htorrent_t *handle_at_index(int index)
+{
+    struct search_arg arg;
+    arg.target = index;
+    arg.curr = 0;
+    arg.out = NULL;
+
+    bitfiend_foreach_torrent(search_handle_func, &arg);
+
+    return arg.out;
+}
+
+static int num_torrents(void)
+{
+    struct search_arg arg;
+    arg.target = -1;
+    arg.curr = 0;
+
+    bitfiend_foreach_torrent(search_handle_func, &arg);
+
+    return arg.curr;
+}
 
 static void print_usage(const char *cmdname)
 {
@@ -51,17 +89,9 @@ static void print_usage(const char *cmdname)
     }
 }
 
-static void exit_cmd_foreach_func(bf_htorrent_t *torrent, void *arg)
-{
-    unsigned *num = (unsigned*)arg;
-    (*num)++;
-}
-
 static int exit_cmd(int argc, char **argv)
 {
-    unsigned num = 0; 
-    bitfiend_foreach_torrent(exit_cmd_foreach_func, &num);
-    if(num > 0){
+    if(num_torrents() > 0) {
 	    printf("Announcing to torrent tracker and closing ongoing connections. "
                "This may take a few seconds...\n");
     }
@@ -85,7 +115,7 @@ static int help_cmd(int argc, char **argv)
 
 static void ls_cmd_foreach_func(bf_htorrent_t *torrent, void *arg)
 {
-    unsigned *index = (unsigned*)arg;
+    int *index = (int*)arg;
 
     bf_stat_t stat;
     bitfiend_stat_torrent(torrent, &stat);
@@ -102,7 +132,7 @@ static int ls_cmd(int argc, char **argv)
         return CMD_FAIL_CMD;
     }
 
-    unsigned index = 0;
+    int index = 0;
     bitfiend_foreach_torrent(ls_cmd_foreach_func, &index);
 
 	return CMD_SUCCESS;
@@ -126,73 +156,34 @@ static int add_cmd(int argc, char **argv)
     return ret;
 }
 
-struct rm_cmd_arg {
-    unsigned target;
-    unsigned curr;
-    bool removed;
-};
-
-static void rm_cmd_foreach_func(bf_htorrent_t *torrent, void *arg)
-{
-    struct rm_cmd_arg *rarg = (struct rm_cmd_arg*)arg;
-
-    if(rarg->curr == rarg->target){
-	    printf("Announcing to torrent tracker and closing ongoing connections. "
-               "This may take a few seconds...\n");
-
-        bitfiend_remove_torrent(torrent); 
-        rarg->removed = true;
-    }
-    rarg->curr++;
-}
-
 static int rm_cmd(int argc, char **argv)
 {
     if(argc != 2){
         print_usage(argv[0]);
         return CMD_FAIL_CMD;
     }
-    struct rm_cmd_arg arg;
+
     char *end;
-    arg.target = strtoul(argv[1], &end, 0);
+    int index = strtoul(argv[1], &end, 0);
     if(argv[1] == end){
         printf("Could not parse %s as an index.\n", argv[1]);
         return CMD_FAIL_CMD;
     }
-    arg.curr = 0;
-    arg.removed = false;
 
-    bitfiend_foreach_torrent(rm_cmd_foreach_func, &arg);
-    if(arg.removed)
-        printf("Successfully removed torrent at index %u.\n", arg.target);
-    else
-        printf("Could not remove torrent at index: %u.\n", arg.target);
+    bf_htorrent_t *handle = handle_at_index(index);
 
-	return CMD_SUCCESS;
-}
+    if(handle){
+	    printf("Announcing to torrent tracker and closing ongoing connections. "
+               "This may take a few seconds...\n");
 
-struct stat_cmd_arg {
-    unsigned target;
-    unsigned curr;
-    bool found;
-};
+        bitfiend_remove_torrent(handle);
 
-static void stat_cmd_foreach_func(bf_htorrent_t *torrent, void *arg)
-{
-    struct stat_cmd_arg *sarg = (struct stat_cmd_arg*)arg;
-    if(sarg->found)
-        return;
-
-    if(sarg->curr == sarg->target) {
-        bf_stat_t stat;
-        bitfiend_stat_torrent(torrent, &stat);
-        float percent = (1.0f - ((float)stat.pieces_left)/stat.tot_pieces) * 100;
-        printf("%3u: %-60s %3.2f%%\n", sarg->curr, stat.name, percent);    
-
-        sarg->found = true;
+        printf("Successfully removed torrent at index %d.\n", index);
+    }else{
+        printf("Could not remove torrent at index: %d.\n", index);
     }
 
-    sarg->curr++;
+	return CMD_SUCCESS;
 }
 
 static int stat_cmd(int argc, char **argv)
@@ -202,21 +193,24 @@ static int stat_cmd(int argc, char **argv)
         return CMD_FAIL_CMD;
     }
 
-    struct stat_cmd_arg arg;
+    int index;
     char *end;
-
-    arg.target = strtoul(argv[1], &end, 0);
+    index = strtoul(argv[1], &end, 0);
     if(end == argv[1]){
         printf("Could not parse %s as an index.\n", argv[1]);
         return CMD_FAIL_CMD;   
     } 
-    arg.curr = 0;
-    arg.found = false;
 
-    bitfiend_foreach_torrent(stat_cmd_foreach_func, &arg);
+    bf_htorrent_t *handle = handle_at_index(index);
+    if(!handle){
+        printf("Could not find torrent at index %d.\n", index);
+        return CMD_FAIL_CMD;
+    }
 
-    if(!arg.found)
-        printf("Could not find torrent at index %u.\n", arg.target);
+    bf_stat_t stat;
+    bitfiend_stat_torrent(handle, &stat);
+    float percent = (1.0f - ((float)stat.pieces_left)/stat.tot_pieces) * 100;
+    printf("%3d: %-60s %3.2f%%\n", index, stat.name, percent);
 
 	return CMD_SUCCESS;
 }
