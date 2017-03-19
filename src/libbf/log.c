@@ -75,5 +75,7 @@ void log_printf(log_level_t lvl, const char *fmt, ...)
     va_end(args);
 
     pthread_mutex_unlock(&s_log_lock);
+
+    fflush(s_logfile);
 }
 
