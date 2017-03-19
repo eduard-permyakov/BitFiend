@@ -25,7 +25,7 @@ libbf: $(LIBBF_OBJS)
 ########## CLI #################################################################
 
 bfcli: CFLAGS=-std=gnu99 -pthread -g
-bfcli: LDFLAGS=-L./lib -lbf -lrt
+bfcli: LDFLAGS=-L./lib -lbf -lm -lrt
 bfcli: INCLUDE=-I./src/
 
 BFCLI_SRCS=$(wildcard ./src/ui/cli/*.c)

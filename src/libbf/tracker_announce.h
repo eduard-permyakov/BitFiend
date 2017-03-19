@@ -53,36 +53,36 @@ enum {
 #define HAS(_ptr, _has) !!((_ptr)->has & (_has))
 
 typedef struct tracker_announce_request {
-    char has;
-    char info_hash[20]; 
-    char peer_id[20];
-    struct sockaddr_in ip;
-    uint16_t port;
-    unsigned long uploaded;
-    unsigned long downloaded;  
-    unsigned long left;
+    char            has;
+    char            info_hash[20]; 
+    char            peer_id[20];
+    struct          sockaddr_in ip;
+    uint16_t        port;
+    unsigned long   uploaded;
+    unsigned long   downloaded;  
+    unsigned long   left;
     torrent_event_t event;
-    unsigned numwant;
-    bool no_peer_id;
-    bool compact;
-    char *key;
-    char *tracker_id;
+    unsigned        numwant;
+    bool            no_peer_id;
+    bool            compact;
+    char           *key;
+    char           *tracker_id;
 }tracker_announce_request_t;
 
 typedef struct tracker_announce_resp {
-    char has;
-    unsigned interval;
-    char *tracker_id;
-    unsigned complete;
-    unsigned incomplete;
-    list_t *peers;
-    char *failure_reason;
-    char *warning_message;
-    int64_t min_interval;
+    char            has;
+    unsigned        interval;
+    char           *tracker_id;
+    unsigned        complete;
+    unsigned        incomplete;
+    list_t         *peers;
+    char           *failure_reason;
+    char           *warning_message;
+    int64_t         min_interval;
 }tracker_announce_resp_t;
 
 tracker_announce_resp_t *tracker_announce(const char *urlstr, tracker_announce_request_t *request);
-void tracker_announce_request_free(tracker_announce_request_t *req);
-void tracker_announce_resp_free(tracker_announce_resp_t *resp);
+void                     tracker_announce_request_free(tracker_announce_request_t *req);
+void                     tracker_announce_resp_free(tracker_announce_resp_t *resp);
 
 #endif
