@@ -48,6 +48,7 @@ static tracker_announce_request_t *create_tracker_request(const void *arg)
         ret->port = targ->port;
         ret->compact = true;
         SET_HAS(ret, REQUEST_HAS_COMPACT);        
+        ret->event = TORRENT_EVENT_NONE;
 
         pthread_mutex_lock(&targ->torrent->sh_lock);
         unsigned num_conns = list_get_size(targ->torrent->sh.peer_connections);
@@ -113,7 +114,6 @@ static void periodic_announce_cleanup(void *arg)
 
     tracker_announce_request_t *req = create_tracker_request(arg);
     req->event = TORRENT_EVENT_STOPPED;
-    SET_HAS(req, REQUEST_HAS_EVENT);
     
     tracker_announce_resp_t *resp = tracker_announce(targ->torrent->announce, req);
 
@@ -143,7 +143,6 @@ static void *periodic_announce(void *arg)
 
         if(!started){
             req->event = TORRENT_EVENT_STARTED;
-            SET_HAS(req, REQUEST_HAS_EVENT);
             started = true;
         }
 
@@ -153,7 +152,6 @@ static void *periodic_announce(void *arg)
 
         if(completed == false && read_completed == true) {
             req->event = TORRENT_EVENT_COMPLETED;
-            SET_HAS(req, REQUEST_HAS_EVENT);
         }
         completed = read_completed;
 

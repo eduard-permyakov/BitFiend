@@ -26,9 +26,10 @@
 #include <stddef.h>
 
 typedef enum {
-    TORRENT_EVENT_STARTED,
-    TORRENT_EVENT_COMPLETED,
-    TORRENT_EVENT_STOPPED
+    TORRENT_EVENT_NONE      = 0,
+    TORRENT_EVENT_COMPLETED = 1,
+    TORRENT_EVENT_STARTED   = 2,
+    TORRENT_EVENT_STOPPED   = 3
 }torrent_event_t;
 
 enum {
@@ -37,8 +38,7 @@ enum {
     REQUEST_HAS_NO_PEER_ID          = (1 << 2),
     REQUEST_HAS_COMPACT             = (1 << 3),
     REQUEST_HAS_KEY                 = (1 << 4),
-    REQUEST_HAS_TRACKER_ID          = (1 << 5),
-    REQUEST_HAS_EVENT               = (1 << 6)
+    REQUEST_HAS_TRACKER_ID          = (1 << 5)
 };
 
 enum {

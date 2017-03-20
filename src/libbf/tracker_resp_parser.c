@@ -30,20 +30,20 @@
 #include <sys/socket.h>
 #include <netdb.h>
 
-static list_t *parse_peerlist_str(byte_str_t *raw)
+list_t *tracker_resp_parse_peerlist(const char *buff, size_t len)
 {
     list_t *peers = list_init();
     if(!peers)
         goto fail_alloc;
 
-    assert(raw->size % 6 == 0);
-    for(int i = 0; i < raw->size; i+= 6) {
+    assert(len % 6 == 0);
+    for(int i = 0; i < len; i+= 6) {
 
         uint32_t ip;
-        memcpy(&ip, raw->str + i, sizeof(uint32_t));
+        memcpy(&ip, buff + i, sizeof(uint32_t));
 
         uint16_t port;
-        memcpy(&port, raw->str + i + sizeof(uint32_t), sizeof(uint16_t));
+        memcpy(&port, buff + i + sizeof(uint32_t), sizeof(uint16_t));
 
         peer_t *peer = malloc(sizeof(peer_t));
         struct sockaddr_in ipv4;
@@ -126,7 +126,7 @@ fail_alloc:
     return NULL;
 }
 
-tracker_announce_resp_t *tracker_resp_parse(const byte_str_t *raw)
+tracker_announce_resp_t *tracker_resp_parse_bencode(const byte_str_t *raw)
 {
     const char *endptr;
     bencode_obj_t *obj = bencode_parse_object(raw->str, &endptr);
@@ -183,7 +183,8 @@ tracker_announce_resp_t *tracker_resp_parse(const byte_str_t *raw)
 
         if(!strcmp(key, "peers")) {
             if((*(bencode_obj_t**)val)->type == BENCODE_TYPE_STRING) {
-                ret->peers = parse_peerlist_str((*(bencode_obj_t**)val)->data.string);
+                byte_str_t *bstr = (*(bencode_obj_t**)val)->data.string;
+                ret->peers = tracker_resp_parse_peerlist(bstr->str, bstr->size);
             }else {
                 ret->peers = parse_peerlist_list((*(bencode_obj_t**)val)->data.list);
             }

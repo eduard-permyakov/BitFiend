@@ -22,7 +22,9 @@
 
 #include "tracker_announce.h"
 #include "byte_str.h"
+#include "list.h"
 
-tracker_announce_resp_t *tracker_resp_parse(const byte_str_t *raw);
+tracker_announce_resp_t *tracker_resp_parse_bencode(const byte_str_t *raw);
+list_t                  *tracker_resp_parse_peerlist(const char *buff, size_t len);
 
 #endif
