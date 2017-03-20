@@ -33,7 +33,7 @@
 
 #define PROT_ID_MAGIC           0x41727101980
 #define CONN_EXPIRE_TIME_SEC    60
-#define CONN_EXPIRED(_time)     (time(NULL) > _time + CONN_EXPIRE_TIME_SEC)
+#define CONN_EXPIRED(_time)     (time(NULL) > (_time) + CONN_EXPIRE_TIME_SEC)
 #define MAX_RECV_BUFF_SZ        2048
 
 typedef struct __attribute__ ((packed)) conn_req {
@@ -94,7 +94,7 @@ static int             tracker_udp_tryconnect(int sockfd, uint32_t trans_id,
                                               conn_resp_t *out, size_t *outlen, time_t timeout);
 static int             tracker_udp_tryannounce(int sockfd, ipv4_req_t *req, 
                                                char *out, size_t *outlen, time_t timeout);
-static int             fill_announce_dgram(tracker_announce_request_t *req, ipv4_req_t *out, 
+static void            fill_announce_dgram(tracker_announce_request_t *req, ipv4_req_t *out, 
                                            uint64_t conn_id, uint32_t trans_id);
 
 
@@ -152,7 +152,7 @@ static int tracker_udp_tryconnect(int sockfd, uint32_t trans_id,
     return 0;
 }
 
-static int fill_announce_dgram(tracker_announce_request_t *req, ipv4_req_t *out, 
+static void fill_announce_dgram(tracker_announce_request_t *req, ipv4_req_t *out, 
                                uint64_t conn_id, uint32_t trans_id)
 {
     out->connection_id = conn_id;
