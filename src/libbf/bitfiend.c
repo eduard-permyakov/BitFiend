@@ -49,7 +49,6 @@ static list_t           *s_torrents;
 static pthread_mutex_t   s_unassoc_peerthreads_lock = PTHREAD_MUTEX_INITIALIZER;
 static list_t           *s_unassoc_peerthreads;
 
-static bool              s_shutdown = false;
 static FILE             *s_logfile;
 
 int bitfiend_init(const char *logfile)
