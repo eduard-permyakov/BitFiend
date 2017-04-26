@@ -413,24 +413,11 @@ int torrent_complete(torrent_t *torrent)
 
 unsigned torrent_left_to_download(torrent_t *torrent)
 {
-    //TODO
     unsigned ret;
     pthread_mutex_lock(&torrent->sh_lock);
     ret = torrent->sh.pieces_left * PEER_REQUEST_SIZE;
     pthread_mutex_unlock(&torrent->sh_lock);
     return ret;
-}
-
-unsigned torrent_downloaded(torrent_t *torrent)
-{
-    //TODO
-    return 0;
-}
-
-unsigned torrent_uploaded(torrent_t *torrent)
-{
-    //TOD
-    return 0;
 }
 
 //temp

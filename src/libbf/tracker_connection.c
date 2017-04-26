@@ -24,6 +24,7 @@
 #include "peer_id.h"
 #include "log.h"
 #include "peer_connection.h"
+#include "stats.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -57,8 +58,8 @@ static tracker_announce_request_t *create_tracker_request(const void *arg)
         ret->numwant = targ->torrent->max_peers - num_conns;
         SET_HAS(ret, REQUEST_HAS_NUMWANT);        
 
-        ret->uploaded = torrent_uploaded(targ->torrent);
-        ret->downloaded = torrent_downloaded(targ->torrent);
+        ret->uploaded = stats_up_total(targ->torrent);
+        ret->downloaded = stats_down_total(targ->torrent);
         ret->left = torrent_left_to_download(targ->torrent);
     }
 

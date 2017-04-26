@@ -24,6 +24,7 @@
 #include "lbitfield.h"
 #include "piece_request.h"
 #include "dl_file.h"
+#include "stats.h"
 
 #include <assert.h>
 #include <string.h>
@@ -47,7 +48,7 @@ int peer_send_buff(int sockfd, const char *buff, size_t len)
 {
     ssize_t tot_sent = 0;
     while(tot_sent < len) {
-        ssize_t sent = send(sockfd, buff, len - tot_sent, 0);
+        ssize_t sent = stats_send(sockfd, buff, len - tot_sent, 0);
         if(sent < 0)
             return -1;
 
@@ -71,7 +72,7 @@ int peer_recv_buff(int sockfd, char *buff, size_t len)
 
     do {
         assert(len - tot_recv > 0);
-        nb = recv(sockfd, buff + tot_recv, len - tot_recv, 0);
+        nb = stats_recv(sockfd, buff + tot_recv, len - tot_recv, 0);
         if(nb < 0){
             return -1;
         }

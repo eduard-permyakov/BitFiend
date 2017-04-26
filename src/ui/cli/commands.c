@@ -30,8 +30,8 @@
 #define ARR_SIZE(a) (sizeof(a)/sizeof((a)[0]))
 
 typedef struct cmd {
-	const char *name;
-	int (*func)(int argc, char **argv);
+    const char *name;
+    int (*func)(int argc, char **argv);
     char *usage;
 }cmd_t;
 
@@ -229,7 +229,15 @@ static int stat_cmd(int argc, char **argv)
     bf_stat_t stat;
     bitfiend_stat_torrent(handle, &stat);
     float percent = (1.0f - ((float)stat.pieces_left)/stat.tot_pieces) * 100;
-    printf("%3d: %-60s %3.2f%%\n", index, stat.name, percent);
+
+    printf("%-20s: %s\n", "Torrent", stat.name);
+    printf("%-20s: %2.2f%%\n", "Completion", percent);
+    printf("%-20s: %lu bytes\n", "Total Downloaded", stat.tot_downloaded);
+    printf("%-20s: %lu bytes\n", "Total Uploaded", stat.tot_uploaded);
+    printf("%-20s: %.2f bits/sec\n", "Avg. upload rate", stat.avg_uprate);
+    printf("%-20s: %.2f bits/sec\n", "Avg. download rate", stat.avg_downrate);
+    printf("%-20s: %.2f bits/sec\n", "Inst. upload rate", stat.inst_uprate);
+    printf("%-20s: %.2f bits/sec\n", "Inst. download rate", stat.inst_downrate);
 
 	return CMD_SUCCESS;
 }

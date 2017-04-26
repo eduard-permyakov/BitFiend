@@ -71,10 +71,7 @@ bool           torrent_sha1_verify(const torrent_t *torrent, unsigned index);
 int            torrent_next_request(torrent_t *torrent, unsigned char *peer_have_bf, unsigned *out);
 /* sh_lock of torrent is taken in this function */
 int            torrent_complete(torrent_t *torrent);
-
 /* sh_lock of torrent is taken in this function */
 unsigned       torrent_left_to_download(torrent_t *torrent);
-unsigned       torrent_downloaded(torrent_t *torrent);
-unsigned       torrent_uploaded(torrent_t *torrent);
 
 #endif

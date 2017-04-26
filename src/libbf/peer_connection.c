@@ -25,6 +25,7 @@
 #include "list.h"
 #include "queue.h"
 #include "piece_request.h"
+#include "stats.h"
 
 #include <string.h>
 #include <stdbool.h>
@@ -268,6 +269,10 @@ static int handshake(int sockfd, peer_arg_t *parg, char peer_id[20], char info_h
             return -1;
         }
 
+        /* Let peer_connection_cleanup reference the associated torrent */
+        parg->torrent = *out;
+        parg->has_torrent = true;
+
     }
 
     return 0;
@@ -283,6 +288,11 @@ static void peer_connection_cleanup(void *arg)
         shutdown(parg->sockfd, SHUT_RDWR);
         close(parg->sockfd);
     }
+
+    if(parg->has_torrent){
+        stats_unregister(pthread_self(), parg->torrent);
+    }
+
     log_printf(LOG_LEVEL_INFO, "Closed peer connection: %s\n", ipstr);
     free(arg);
 }
@@ -662,6 +672,9 @@ static void *peer_connection(void *arg)
     if(handshake(sockfd, parg, peer_id, info_hash, &torrent))
         goto fail_init;
     log_printf(LOG_LEVEL_INFO, "Handshake with peer %s (ID: %.*s) successful\n", ipstr, 20, peer_id);
+
+    /* Register for logging uploading/downloading */
+    stats_register(pthread_self(), torrent);
 
     /* Init queue for "have" events */
     queue = peer_queue_open(O_RDONLY | O_CREAT | O_NONBLOCK);

@@ -30,9 +30,15 @@ enum{
 };
 
 typedef struct bf_stat {
-    const char *name;
-    unsigned    tot_pieces;
-    unsigned    pieces_left; 
+    const char    *name;
+    unsigned       tot_pieces;
+    unsigned       pieces_left; 
+    unsigned long  tot_uploaded;    /* bytes */
+    unsigned long  tot_downloaded;  /* bytes */
+    double         avg_uprate;      /* bits/sec */
+    double         avg_downrate;    /* bits/sec */
+    double         inst_uprate;     /* bits/sec */
+    double         inst_downrate;   /* bits/sec */
 }bf_stat_t;
 
 typedef void bf_htorrent_t;

@@ -27,6 +27,7 @@
 #include "log.h" 
 #include "peer_connection.h"
 #include "thread_reaper.h"
+#include "stats.h"
 
 #include <string.h>
 #include <pthread.h>
@@ -64,6 +65,9 @@ int bitfiend_init(const char *logfile)
 
     s_torrents = list_init();
     s_unassoc_peerthreads = list_init();
+
+    if(stats_init())
+        goto fail_init;
 
     if(peer_listener_create(&s_peer_listener, &s_port))
         goto fail_init;
@@ -118,6 +122,7 @@ static int shutdown_torrent(torrent_t *torrent)
     }
 
     torrent_free(torrent);
+    stats_remove_entry(torrent);
     return BITFIEND_SUCCESS;
 
 fail_stop_peer:
@@ -186,6 +191,8 @@ int bitfiend_shutdown(void)
     list_free(s_torrents);
     pthread_mutex_unlock(&s_torrents_lock);
 
+    stats_shutdown();
+
     if(ret == BITFIEND_SUCCESS)
         log_printf(LOG_LEVEL_INFO, "BitFiend shutdown successful\n");
     else
@@ -224,6 +231,8 @@ bf_htorrent_t *bitfiend_add_torrent(const char *metafile, const char *destdir)
     if(!torrent)
         goto fail_create;
 
+    stats_add_entry(torrent);
+
     tracker_arg_t *arg = malloc(sizeof(tracker_arg_t));
     arg->torrent = torrent;
     arg->port = s_port;
@@ -261,6 +270,13 @@ int bitfiend_stat_torrent(bf_htorrent_t *torrent, bf_stat_t *out)
     pthread_mutex_lock(&ptr->sh_lock); 
     out->pieces_left = ptr->sh.pieces_left;
     pthread_mutex_unlock(&ptr->sh_lock); 
+
+    out->tot_uploaded = stats_up_total(ptr);
+    out->tot_downloaded = stats_down_total(ptr);
+    out->avg_uprate = stats_up_avgrate(ptr);
+    out->avg_downrate = stats_down_avgrate(ptr);
+    out->inst_uprate = stats_up_instrate(ptr);
+    out->inst_downrate = stats_down_instrate(ptr);
 }
 
 void bitfiend_foreach_torrent(void (*func)(bf_htorrent_t *torrent, void *arg), void *arg)
