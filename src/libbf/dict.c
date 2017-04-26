@@ -36,8 +36,6 @@
 #define SET_TO_LAST_ENTRY(entry_ptr, dict_ptr, bin) \
     do { \
         entry_ptr = dict_ptr->bins[bin]; \
-        if(!entry_ptr) \
-            break; \
         while(entry_ptr->next) \
             entry_ptr = entry_ptr->next; \
     }while(0)
@@ -141,8 +139,9 @@ int dict_add(dict_t *dict, const char *key, unsigned char *data, size_t size)
     if(!entry)
         return -1;
 
-    if(dict_get(dict, key))
+    if(dict_get(dict, key)){
         dict_remove(dict, key);
+    }
 
     if(!dict->bins[hash]) {
         dict->bins[hash] = entry;
@@ -169,6 +168,7 @@ void *dict_remove(dict_t *dict, const char *key)
 {
     unsigned hash = hashf(dict->binsize, key);
     FOREACH_ENTRY_AND_PREV_IN_BIN(entry, prev, dict, hash) {
+
         if(!strcmp(entry->key, key)) {
             if(prev)
                 prev->next = entry->next; 
@@ -179,6 +179,7 @@ void *dict_remove(dict_t *dict, const char *key)
 
             dict_entry_free(entry);
             dict->size--;
+            break;
         }
     }
 }
