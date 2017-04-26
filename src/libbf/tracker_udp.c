@@ -85,17 +85,14 @@ typedef enum tracker_action {
     TRACKER_ACTION_ERROR    = 3
 }tracker_action_t;
 
-static inline time_t   timeout(int n);
-static inline uint32_t new_transaction_id(void);
-static int             tracker_send_dgram(int sockfd, const char *buff, size_t len);
-static int             tracker_recv_dgram(int sockfd, char *buff, size_t max, 
-                                          size_t *dgram_size, time_t timeout);
-static int             tracker_udp_tryconnect(int sockfd, uint32_t trans_id, 
-                                              conn_resp_t *out, size_t *outlen, time_t timeout);
-static int             tracker_udp_tryannounce(int sockfd, ipv4_req_t *req, 
-                                               char *out, size_t *outlen, time_t timeout);
-static void            fill_announce_dgram(tracker_announce_request_t *req, ipv4_req_t *out, 
-                                           uint64_t conn_id, uint32_t trans_id);
+static int  tracker_send_dgram(int sockfd, const char *buff, size_t len);
+static int  tracker_recv_dgram(int sockfd, char *buff, size_t max, size_t *dgram_size, time_t timeout);
+static int  tracker_udp_tryconnect(int sockfd, uint32_t trans_id, 
+                                   conn_resp_t *out, size_t *outlen, time_t timeout);
+static int  tracker_udp_tryannounce(int sockfd, ipv4_req_t *req, char *out, 
+                                    size_t *outlen, time_t timeout);
+static void fill_announce_dgram(tracker_announce_request_t *req, ipv4_req_t *out, 
+                                uint64_t conn_id, uint32_t trans_id);
 
 
 static inline time_t timeout(int n)
