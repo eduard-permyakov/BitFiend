@@ -102,6 +102,28 @@ queue_t *queue_init(size_t entry_size, int init_capacity)
     return ret;
 }
 
+queue_t *queue_copy(const queue_t *queue)
+{
+    queue_t *ret = malloc(sizeof(queue_t)); 
+    if(!ret)
+        return NULL;
+
+    ret->mem = malloc(queue->entry_size * queue->capacity);
+    if(!ret->mem){
+        free(ret);
+        return NULL;
+    }
+    memcpy(ret->mem, queue->mem, queue->entry_size * queue->capacity);
+    
+    ret->size = queue->size; 
+    ret->capacity = queue->capacity;
+    ret->entry_size = queue->entry_size;
+    ret->head = ret->mem + (queue->head - queue->mem);
+    ret->tail = ret->mem + (queue->tail- queue->mem);
+
+    return ret;
+}
+
 void queue_free(queue_t *queue)
 {
     free(queue->mem);
