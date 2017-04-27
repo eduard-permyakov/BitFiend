@@ -6,8 +6,8 @@ It can be built for Linux and has a command line interface.
 The client has successfully torrented Ubuntu ISOs, academic torrents, and various 
 multimedia files from popular torrent websites. It should work with most torrents!
 
-At the moment, the client still lacks a number of features such as accurate bandwidth
-reporting. I plan to continue to extend its' functionality in the future.
+At the moment, the client still lacks some non-essential features. I plan to 
+continue to extend its' functionality in the future.
 
 ## Building BitFiend ##
 
