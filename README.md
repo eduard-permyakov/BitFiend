@@ -1,4 +1,4 @@
-# BitFiend #
+<img src="./img/bitfiend.png"/>
 
 BitFiend is a BitTorrent client written in C. It is multithreaded with POSIX threads. 
 It can be built for Linux and has a command line interface. 
@@ -19,3 +19,7 @@ directory. The library API can be found in `libbf/bitfiend.h`
 BitFiend does not depend on any third party libraries. It requires a C99 compiler with 
 GNU extensions as well as POSIX compliance. Some non-portable Linux-specific code is
 present.
+
+## Example BitFiend Session ##
+
+<img src="./img/session.png"/>
