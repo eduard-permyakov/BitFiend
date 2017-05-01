@@ -1,4 +1,4 @@
-<img src="./img/bitfiend.png"/>
+## <img src="./img/bitfiend.png"/> ##
 
 BitFiend is a BitTorrent client written in C. It is multithreaded with POSIX threads. 
 It can be built for Linux and has a command line interface. 
