@@ -60,7 +60,8 @@ url_t *url_from_str(const char *str)
         ret->port = 443;
     }
 
-    const char *path = strtok_r(NULL, ":/", &saveptr);
+    const char *p;
+    const char *path = (p = strtok_r(NULL, ":/", &saveptr)) ? p : "";
     ret->path = malloc(strlen(path) + 1);
     if(!ret->path)
         goto fail_alloc_path;
